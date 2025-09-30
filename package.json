@@ -22,7 +22,7 @@
     "@biomejs/biome": "2.2.4",
     "@bob-translate/types": "1.1.0",
     "@types/bun": "latest",
-    "typescript": "5.9.2"
+    "typescript": "5.9.3"
   },
   "engines": {
     "bun": "1.2.19"
