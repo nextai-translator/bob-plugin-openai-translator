@@ -71,7 +71,7 @@ const validatePluginConfig = (): ServiceError | null => {
 };
 
 export const translate: TextTranslate = (query) => {
-  const { apiKeys, apiUrl, serviceProvider, stream } = $option;
+  const { apiKeys, serviceProvider, stream } = $option;
 
   const error = validatePluginConfig();
   if (error) {
@@ -83,12 +83,7 @@ export const translate: TextTranslate = (query) => {
   const apiKey = getApiKey(apiKeys);
 
   serviceAdapter
-    .translate(
-      query,
-      apiKey,
-      ensureHttpsAndNoTrailingSlash(apiUrl),
-      stream === 'enable',
-    )
+    .translate(query, apiKey, stream === 'enable')
     .catch((error: unknown) => {
       handleGeneralError(query, error);
     });

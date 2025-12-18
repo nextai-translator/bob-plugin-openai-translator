@@ -80,7 +80,7 @@ export interface ServiceAdapter {
   parseResponse: (
     response: HttpResponse<GeminiResponse | OpenAiResponse>,
   ) => string;
-  getTextGenerationUrl: (apiUrl: string) => string;
+  getTextGenerationUrl: () => string;
   testApiConnection: (
     apiKey: string,
     apiUrl: string,
@@ -106,7 +106,6 @@ export interface ServiceAdapter {
   translate: (
     query: TextTranslateQuery,
     apiKey: string,
-    apiUrl: string,
     isStream: boolean,
   ) => Promise<void>;
 }

@@ -55,7 +55,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
 
   abstract buildRequestBody(query: TextTranslateQuery): Record<string, unknown>;
 
-  abstract getTextGenerationUrl(apiUrl: string): string;
+  abstract getTextGenerationUrl(): string;
 
   public handleStream(
     streamData: { text: string },
@@ -122,11 +122,10 @@ export abstract class BaseAdapter implements ServiceAdapter {
   public async translate(
     query: TextTranslateQuery,
     apiKey: string,
-    apiUrl: string,
     isStream: boolean,
   ): Promise<void> {
     try {
-      const url = this.getTextGenerationUrl(apiUrl);
+      const url = this.getTextGenerationUrl();
       const header = this.buildHeaders(apiKey);
       const body = this.buildRequestBody(query);
 

@@ -16,7 +16,7 @@
 
   - Google Gemini: Use [Google Gemini](https://ai.google.dev/gemini-api/docs) service
 
-### API URL
+### API Base URL
 
 - Optional (OpenAI and Google Gemini) / Required (Azure OpenAI and OpenAI Compatible)
 
@@ -24,39 +24,60 @@
 
 - Description
 
-  - OpenAI: Optional, default value:
+  - OpenAI / OpenAI Compatible: Optional, default value:
 
     ```
     https://api.openai.com
     ```
 
-  - OpenAI Compatible: Required, complete API URL. Currently only supports Responses API endpoint (ending with `/responses`):
+  - Azure OpenAI: Required, for example:
 
     ```
-    https://gateway.ai.cloudflare.com/v1/CLOUDFLARE_ACCOUNT_ID/GATEWAY_ID/openai/responses
+    https://RESOURCE_NAME.openai.azure.com
     ```
-
-    Note: This plugin currently only supports OpenAI compatible services that use the Responses API
-
-  - Azure OpenAI: Required, complete API URL. Currently only supports Responses API with the following two formats:
-
-    With deployment name:
-    ```
-    https://RESOURCE_NAME.openai.azure.com/openai/deployments/DEPLOYMENT_NAME/responses?api-version=preview
-    ```
-
-    Base endpoint (model specified in request body):
-    ```
-    https://RESOURCE_NAME.openai.azure.com/openai/v1/responses?api-version=preview
-    ```
-
-    Note: This plugin currently only supports Azure OpenAI's Responses API with preview API version
 
   - Google Gemini: Optional, default value:
 
     ```
     https://generativelanguage.googleapis.com/v1beta/models
     ```
+
+### API Path
+
+- Optional
+
+- Default value: `/v1/responses`
+
+- Description
+
+  - Supports two OpenAI API formats:
+
+    - **Responses API** (default): `/v1/responses`
+    - **Chat Completions API**: `/v1/chat/completions`
+
+  - OpenAI / OpenAI Compatible:
+
+    ```
+    /v1/responses
+    ```
+    or
+    ```
+    /v1/chat/completions
+    ```
+
+  - Azure OpenAI: Must include the full deployment path and API version, for example:
+
+    Using Responses API:
+    ```
+    /openai/deployments/DEPLOYMENT_NAME/responses?api-version=preview
+    ```
+
+    Using Chat Completions API:
+    ```
+    /openai/deployments/DEPLOYMENT_NAME/chat/completions?api-version=2024-02-15-preview
+    ```
+
+  - Google Gemini: Does not support custom Path, leave empty
 
 ### API KEY
 
@@ -72,7 +93,7 @@
 
 - Required
 
-- Default value: `gpt-3.5-turbo`
+- Default value: `gpt-5-mini`
 
 - Description
 
@@ -82,7 +103,7 @@
 
 - Optional
 
-- Default value: `gpt-3.5-turbo`
+- Default value: None
 
 - Description
 
@@ -129,6 +150,18 @@
   - When enabled, translation results will be displayed in real-time
 
   - When disabled, results will be displayed all at once after translation is complete
+
+### Thinking Mode
+
+- Optional
+
+- Default value: Disable
+
+- Description
+
+  - Only some models support controlling the thinking mode through this setting
+
+  - Disabling can reduce latency and token consumption, suitable for translation scenarios
 
 ### Temperature
 

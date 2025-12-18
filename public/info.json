@@ -33,14 +33,24 @@
       "type": "menu"
     },
     {
-      "desc": "OpenAI: https://api.openai.com\n\nOpenAI Compatible: 完整的 API 地址，例如：https://gateway.ai.cloudflare.com/v1/CF_ACCOUNT_ID/GATEWAY_ID/openai/responses\n\nAzure OpenAI: https://RESOURCE_NAME.openai.azure.com/openai/deployments/DEPLOYMENT_NAME/responses?api-version=preview\n\nGoogle Gemini: https://generativelanguage.googleapis.com/v1beta/models",
+      "desc": "OpenAI: https://api.openai.com\n\nOpenAI Compatible: https://your-gateway.com\n\nAzure OpenAI: https://RESOURCE_NAME.openai.azure.com\n\nGoogle Gemini: https://generativelanguage.googleapis.com/v1beta/models",
       "identifier": "apiUrl",
       "textConfig": {
         "height": "55",
         "placeholderText": "https://api.openai.com",
         "type": "visible"
       },
-      "title": "API URL",
+      "title": "API Base URL",
+      "type": "text"
+    },
+    {
+      "desc": "拼接在 Base URL 后面。默认使用 /v1/responses\n\nOpenAI: /v1/chat/completions\n\nAzure OpenAI: /openai/deployments/DEPLOYMENT_NAME/responses?api-version=previews\n\nGoogle Gemini: 不支持，留空即可",
+      "identifier": "apiPath",
+      "textConfig": {
+        "placeholderText": "/v1/responses",
+        "type": "visible"
+      },
+      "title": "API Path",
       "type": "text"
     },
     {

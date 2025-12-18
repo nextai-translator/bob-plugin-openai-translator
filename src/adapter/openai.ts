@@ -29,10 +29,24 @@ export class OpenAiAdapter extends BaseAdapter {
     );
   }
 
+  protected getApiPath(): string {
+    return $option.apiPath || '/v1/responses';
+  }
+
+  protected isChatCompletionsApi(): boolean {
+    return this.getApiPath().includes('/chat/completions');
+  }
+
   protected extractStreamDelta(
     data: Record<string, unknown>,
     event: EventSourceMessage,
   ): string | null {
+    // Chat Completions API format: choices[0].delta.content
+    if (this.isChatCompletionsApi()) {
+      return this.extractChatCompletionsDelta(data);
+    }
+
+    // Responses API format
     if (
       event.event === 'response.output_text.delta' ||
       data.type === 'response.output_text.delta'
@@ -40,6 +54,15 @@ export class OpenAiAdapter extends BaseAdapter {
       return typeof data.delta === 'string' ? data.delta : null;
     }
     return this.extractDeltaFromData(data);
+  }
+
+  private extractChatCompletionsDelta(
+    data: Record<string, unknown>,
+  ): string | null {
+    const choices = data.choices as Array<{
+      delta?: { content?: string };
+    }>;
+    return choices?.[0]?.delta?.content ?? null;
   }
 
   protected extractStreamError(
@@ -125,6 +148,43 @@ export class OpenAiAdapter extends BaseAdapter {
     systemPrompt += formattingInstructions;
 
     const model = this.getModel();
+
+    // Use Chat Completions API format if path contains /chat/completions
+    if (this.isChatCompletionsApi()) {
+      return this.buildChatCompletionsRequestBody(
+        model,
+        systemPrompt,
+        userPrompt,
+      );
+    }
+
+    // Responses API format (default)
+    return this.buildResponsesApiRequestBody(model, systemPrompt, userPrompt);
+  }
+
+  private buildChatCompletionsRequestBody(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      model,
+      stream: this.isStreamEnabled(),
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: this.getTemperature(),
+    };
+
+    return body;
+  }
+
+  private buildResponsesApiRequestBody(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       model,
       stream: this.isStreamEnabled(),
@@ -150,6 +210,11 @@ export class OpenAiAdapter extends BaseAdapter {
     response: HttpResponse<GeminiResponse | OpenAiResponse>,
   ): string {
     const { data } = response;
+
+    // Handle Chat Completions API format: choices[0].message.content
+    if (this.isChatCompletionsApi()) {
+      return this.parseChatCompletionsResponse(data);
+    }
 
     // Handle Responses API format
     if (typeof data === 'object' && 'output' in data) {
@@ -183,11 +248,24 @@ export class OpenAiAdapter extends BaseAdapter {
     throw new Error('Unsupported response type');
   }
 
-  public getTextGenerationUrl(_apiUrl: string): string {
-    return `${this.config.baseUrl}/v1/responses`;
+  private parseChatCompletionsResponse(data: unknown): string {
+    const response = data as {
+      choices?: Array<{
+        message?: { content?: string };
+      }>;
+    };
+    const content = response?.choices?.[0]?.message?.content;
+    if (content) {
+      return content.trim();
+    }
+    throw new Error('No content returned from Chat Completions API');
   }
 
-  protected getValidationUrl(_apiUrl: string): string {
+  public getTextGenerationUrl(): string {
+    return `${this.config.baseUrl}${this.getApiPath()}`;
+  }
+
+  protected getValidationUrl(): string {
     return `${this.config.baseUrl}/v1/models`;
   }
 
@@ -240,11 +318,11 @@ export class OpenAiAdapter extends BaseAdapter {
 
   public async testApiConnection(
     apiKey: string,
-    apiUrl: string,
+    _apiUrl: string,
     completion: ValidationCompletion,
   ): Promise<void> {
     const header = this.buildHeaders(apiKey);
-    const validationUrl = this.getValidationUrl(apiUrl);
+    const validationUrl = this.getValidationUrl();
 
     try {
       const response = await $http.request({

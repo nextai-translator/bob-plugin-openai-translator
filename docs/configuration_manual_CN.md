@@ -17,7 +17,7 @@
   - Google Gemini：使用 [Google Gemini](https://ai.google.dev/gemini-api/docs) 服务
 
 
-### API URL
+### API Base URL
 
 - 可选项（OpenAI 和 Google Gemini）/ 必填项（Azure OpenAI 和 OpenAI Compatible）
 
@@ -25,39 +25,60 @@
 
 - 说明
 
-  - OpenAI：可选，默认为：
+  - OpenAI / OpenAI Compatible：可选，默认为：
 
     ```
     https://api.openai.com
     ```
 
-  - OpenAI Compatible：必填，需填入完整的 API URL。目前仅支持 Responses API 端点（以 `/responses` 结尾）：
+  - Azure OpenAI：必填，例如：
 
     ```
-    https://gateway.ai.cloudflare.com/v1/CLOUDFLARE_ACCOUNT_ID/GATEWAY_ID/openai/responses
+    https://RESOURCE_NAME.openai.azure.com
     ```
-
-    注：本插件目前仅支持使用 Responses API 的 OpenAI 兼容服务
-
-  - Azure OpenAI：必填，需填入完整的 API URL。目前仅支持 Responses API，支持以下两种格式：
-
-    带部署名称：
-    ```
-    https://RESOURCE_NAME.openai.azure.com/openai/deployments/DEPLOYMENT_NAME/responses?api-version=preview
-    ```
-
-    基础端点（模型在请求体中指定）：
-    ```
-    https://RESOURCE_NAME.openai.azure.com/openai/v1/responses?api-version=preview
-    ```
-
-    注：本插件目前仅支持 Azure OpenAI 的 Responses API，需使用 preview API 版本
 
   - Google Gemini：可选，默认为：
 
     ```
     https://generativelanguage.googleapis.com/v1beta/models
     ```
+
+### API Path
+
+- 可选项
+
+- 默认值：`/v1/responses`
+
+- 说明
+
+  - 支持 OpenAI 的两种 API 格式：
+
+    - **Responses API**（默认）：`/v1/responses`
+    - **Chat Completions API**：`/v1/chat/completions`
+
+  - OpenAI / OpenAI Compatible：
+
+    ```
+    /v1/responses
+    ```
+    或
+    ```
+    /v1/chat/completions
+    ```
+
+  - Azure OpenAI：需包含完整的部署路径和 API 版本，例如：
+
+    使用 Responses API：
+    ```
+    /openai/deployments/DEPLOYMENT_NAME/responses?api-version=preview
+    ```
+
+    使用 Chat Completions API：
+    ```
+    /openai/deployments/DEPLOYMENT_NAME/chat/completions?api-version=2024-02-15-preview
+    ```
+
+  - Google Gemini：不支持自定义 Path，留空即可
 
 ### API KEY
 
@@ -73,7 +94,7 @@
 
 - 必选项
 
-- 默认值：`gpt-3.5-turbo`
+- 默认值：`gpt-5-mini`
 
 - 说明
 
@@ -83,7 +104,7 @@
 
 - 可选项
 
-- 默认值：`gpt-3.5-turbo`
+- 默认值：无
 
 - 说明
 
@@ -130,6 +151,18 @@
   - 启用后翻译结果会实时显示
 
   - 禁用后会等待翻译完成后一次性显示
+
+### 深度思考
+
+- 可选项
+
+- 默认值：`Disable`
+
+- 说明
+
+  - 仅部分模型支持通过此设置控制深度思考能力的启用状态
+
+  - 禁用可减少延迟和 token 消耗，适合翻译场景
 
 ### 温度
 

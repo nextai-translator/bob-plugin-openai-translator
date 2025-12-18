@@ -104,7 +104,7 @@ export class GeminiAdapter extends BaseAdapter {
     };
   }
 
-  public getTextGenerationUrl(_apiUrl: string): string {
+  public getTextGenerationUrl(): string {
     const operationName = this.isStreamEnabled()
       ? 'streamGenerateContent'
       : 'generateContent';
@@ -160,5 +160,4 @@ export class GeminiAdapter extends BaseAdapter {
       handleValidateError(completion, error);
     }
   }
-
 }
