@@ -4,6 +4,7 @@ import type {
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
+import type { EventSourceMessage } from 'eventsource-parser';
 import type {
   GeminiResponse,
   OpenAiResponse,
@@ -11,9 +12,28 @@ import type {
   ServiceAdapterConfig,
 } from '../types';
 import { convertToServiceError, handleGeneralError } from '../utils';
+import { SseStreamHandler } from '../utils/sse';
 
 export abstract class BaseAdapter implements ServiceAdapter {
-  protected constructor(protected readonly config: ServiceAdapterConfig) {}
+  private readonly sseHandler: SseStreamHandler;
+
+  constructor(protected readonly config: ServiceAdapterConfig) {
+    this.sseHandler = new SseStreamHandler({
+      troubleshootingLink: config.troubleshootingLink,
+      extractDelta: (data, event) => this.extractStreamDelta(data, event),
+      extractError: (data, link) => this.extractStreamError(data, link),
+    });
+  }
+
+  protected abstract extractStreamDelta(
+    data: Record<string, unknown>,
+    event: EventSourceMessage,
+  ): string | null;
+
+  protected abstract extractStreamError(
+    data: Record<string, unknown>,
+    troubleshootingLink: string,
+  ): ServiceError | null;
 
   protected getTemperature(): number {
     return Number($option.temperature) ?? 0.2;
@@ -37,11 +57,13 @@ export abstract class BaseAdapter implements ServiceAdapter {
 
   abstract getTextGenerationUrl(apiUrl: string): string;
 
-  abstract handleStream(
+  public handleStream(
     streamData: { text: string },
     query: TextTranslateQuery,
     targetText: string,
-  ): string;
+  ): string {
+    return this.sseHandler.feed(streamData.text, query, targetText);
+  }
 
   abstract parseResponse(
     response: HttpResponse<GeminiResponse | OpenAiResponse>,
@@ -109,6 +131,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
       const body = this.buildRequestBody(query);
 
       if (isStream) {
+        this.sseHandler.reset();
         await this.makeStreamRequest(url, header, body, query);
       } else {
         await this.makeRequest(url, header, body, query);

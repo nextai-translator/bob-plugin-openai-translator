@@ -4,6 +4,7 @@ import type {
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
+import type { EventSourceMessage } from 'eventsource-parser';
 import type {
   GeminiResponse,
   OpenAiErrorResponse,
@@ -15,13 +16,9 @@ import {
   handleValidateError,
   replacePromptKeywords,
 } from '../utils';
-import { LineDecoder, SseDecoder, type SseMessage } from '../utils/sse';
 import { BaseAdapter } from './base';
 
 export class OpenAiAdapter extends BaseAdapter {
-  private sseDecoder = new SseDecoder();
-  private lineDecoder = new LineDecoder();
-
   constructor(config?: ServiceAdapterConfig) {
     super(
       config || {
@@ -30,6 +27,34 @@ export class OpenAiAdapter extends BaseAdapter {
         baseUrl: $option.apiUrl || 'https://api.openai.com',
       },
     );
+  }
+
+  protected extractStreamDelta(
+    data: Record<string, unknown>,
+    event: EventSourceMessage,
+  ): string | null {
+    if (
+      event.event === 'response.output_text.delta' ||
+      data.type === 'response.output_text.delta'
+    ) {
+      return typeof data.delta === 'string' ? data.delta : null;
+    }
+    return this.extractDeltaFromData(data);
+  }
+
+  protected extractStreamError(
+    data: Record<string, unknown>,
+    troubleshootingLink: string,
+  ): ServiceError | null {
+    if (!data.error) return null;
+
+    const error = data.error as Record<string, unknown>;
+    return {
+      type: 'api',
+      message: (error.message as string) || 'API request failed',
+      addition: error.param ? `Parameter: ${error.param}` : '',
+      troubleshootingLink,
+    };
   }
 
   protected extractErrorFromResponse(
@@ -211,86 +236,6 @@ export class OpenAiAdapter extends BaseAdapter {
     }
 
     return null;
-  }
-
-  private parseSseMessage(sse: SseMessage): string | null {
-    // Handle [DONE] message
-    if (sse.data === '[DONE]' || sse.data.startsWith('[DONE]')) {
-      return null;
-    }
-
-    try {
-      const dataObj = JSON.parse(sse.data);
-
-      // Check for errors in the data
-      if (dataObj.error) {
-        throw {
-          type: dataObj.error.type || 'api',
-          message: dataObj.error.message || 'API request failed',
-          addition: dataObj.error.param
-            ? `Parameter: ${dataObj.error.param}`
-            : undefined,
-          troubleshootingLink: this.config.troubleshootingLink,
-        };
-      }
-
-      // Only process response.output_text.delta events
-      if (
-        sse.event === 'response.output_text.delta' ||
-        (!sse.event && dataObj.type === 'response.output_text.delta')
-      ) {
-        return typeof dataObj.delta === 'string' ? dataObj.delta : null;
-      }
-
-      // Try to extract delta from other formats
-      return this.extractDeltaFromData(dataObj);
-    } catch (error) {
-      // If it's our custom error object, re-throw it
-      if (error && typeof error === 'object' && 'type' in error) {
-        throw error;
-      }
-
-      // Log parsing errors but don't throw
-      console.error('Failed to parse SSE message:', sse.data, error);
-      return null;
-    }
-  }
-
-  public handleStream(
-    streamData: { text: string },
-    query: TextTranslateQuery,
-    targetText: string,
-  ): string {
-    // Process the incoming chunk through the line decoder
-    const lines = this.lineDecoder.decode(streamData.text);
-
-    for (const line of lines) {
-      const sse = this.sseDecoder.decode(line);
-      if (sse) {
-        try {
-          const delta = this.parseSseMessage(sse);
-          if (delta) {
-            targetText += delta;
-            query.onStream({
-              result: {
-                from: query.detectFrom,
-                to: query.detectTo,
-                toParagraphs: [targetText],
-              },
-            });
-          }
-        } catch (error) {
-          // Handle errors from parseSseMessage
-          if (error && typeof error === 'object' && 'type' in error) {
-            throw error; // Re-throw API errors
-          }
-          // Log other errors but continue processing
-          console.error('Error processing SSE message:', error);
-        }
-      }
-    }
-
-    return targetText;
   }
 
   public async testApiConnection(

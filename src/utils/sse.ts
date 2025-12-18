@@ -1,91 +1,98 @@
-export interface SseMessage {
-  event: string | null;
-  data: string;
-  raw: string[];
+import type { ServiceError, TextTranslateQuery } from '@bob-translate/types';
+import {
+  createParser,
+  type EventSourceMessage,
+  type EventSourceParser,
+} from 'eventsource-parser';
+
+export type DeltaExtractor = (
+  data: Record<string, unknown>,
+  event: EventSourceMessage,
+) => string | null;
+
+export type ErrorExtractor = (
+  data: Record<string, unknown>,
+  troubleshootingLink: string,
+) => ServiceError | null;
+
+interface SseStreamHandlerConfig {
+  extractDelta: DeltaExtractor;
+  extractError: ErrorExtractor;
+  troubleshootingLink: string;
 }
 
-export class SseDecoder {
-  private data: string[] = [];
-  private event: string | null = null;
-  private chunks: string[] = [];
-
-  decode(line: string): SseMessage | null {
-    // Remove trailing \r if present
-    if (line.endsWith('\r')) {
-      line = line.substring(0, line.length - 1);
-    }
-
-    // Empty line signals end of SSE message
-    if (!line) {
-      if (!this.event && !this.data.length) return null;
-
-      const sse: SseMessage = {
-        event: this.event,
-        data: this.data.join('\n'),
-        raw: this.chunks,
-      };
-
-      this.event = null;
-      this.data = [];
-      this.chunks = [];
-
-      return sse;
-    }
-
-    this.chunks.push(line);
-
-    // Comments start with ':'
-    if (line.startsWith(':')) {
-      return null;
-    }
-
-    const colonIndex = line.indexOf(':');
-    if (colonIndex === -1) {
-      // Line without colon, treat entire line as field name
-      return null;
-    }
-
-    const fieldname = line.substring(0, colonIndex);
-    let value = line.substring(colonIndex + 1);
-
-    // Remove leading space from value
-    if (value.startsWith(' ')) {
-      value = value.substring(1);
-    }
-
-    if (fieldname === 'event') {
-      this.event = value;
-    } else if (fieldname === 'data') {
-      this.data.push(value);
-    }
-
-    return null;
-  }
+interface StreamState {
+  targetText: string;
+  query: TextTranslateQuery | null;
+  error: ServiceError | null;
 }
 
-export class LineDecoder {
-  private buffer = '';
+export class SseStreamHandler {
+  private parser: EventSourceParser | null = null;
+  private state: StreamState = { targetText: '', query: null, error: null };
+  private readonly config: SseStreamHandlerConfig;
 
-  decode(chunk: string): string[] {
-    const lines: string[] = [];
-    this.buffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.buffer.indexOf('\n');
-      if (newlineIndex === -1) break;
-
-      const line = this.buffer.slice(0, newlineIndex);
-      lines.push(line);
-      this.buffer = this.buffer.slice(newlineIndex + 1);
-    }
-
-    return lines;
+  constructor(config: SseStreamHandlerConfig) {
+    this.config = config;
   }
 
-  flush(): string[] {
-    if (!this.buffer) return [];
-    const remainder = this.buffer;
-    this.buffer = '';
-    return [remainder];
+  reset(): void {
+    this.state = { targetText: '', query: null, error: null };
+    this.parser = createParser({
+      onEvent: (event) => this.handleEvent(event),
+    });
+  }
+
+  feed(
+    text: string,
+    query: TextTranslateQuery,
+    currentTargetText: string,
+  ): string {
+    this.state.query = query;
+    this.state.targetText = currentTargetText;
+
+    this.parser?.feed(text);
+
+    if (this.state.error) {
+      throw this.state.error;
+    }
+
+    return this.state.targetText;
+  }
+
+  private handleEvent(event: EventSourceMessage): void {
+    // Ignore [DONE] messages
+    if (event.data === '[DONE]' || event.data.startsWith('[DONE]')) {
+      return;
+    }
+
+    try {
+      const data = JSON.parse(event.data) as Record<string, unknown>;
+
+      // Check for errors first
+      const error = this.config.extractError(
+        data,
+        this.config.troubleshootingLink,
+      );
+      if (error) {
+        this.state.error = error;
+        return;
+      }
+
+      // Extract delta text
+      const delta = this.config.extractDelta(data, event);
+      if (delta && this.state.query) {
+        this.state.targetText += delta;
+        this.state.query.onStream({
+          result: {
+            from: this.state.query.detectFrom,
+            to: this.state.query.detectTo,
+            toParagraphs: [this.state.targetText],
+          },
+        });
+      }
+    } catch {
+      // Ignore parsing errors for non-JSON events
+    }
   }
 }

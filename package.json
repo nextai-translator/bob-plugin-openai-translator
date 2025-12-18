@@ -26,5 +26,8 @@
   },
   "engines": {
     "bun": "1.2.19"
+  },
+  "dependencies": {
+    "eventsource-parser": "3.0.6"
   }
 }

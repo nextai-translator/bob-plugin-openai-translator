@@ -19,26 +19,42 @@ export class GeminiAdapter extends BaseAdapter {
     });
   }
 
+  protected extractStreamDelta(data: Record<string, unknown>): string | null {
+    const candidates = data.candidates as Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
+    return candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  }
+
+  protected extractStreamError(
+    data: Record<string, unknown>,
+    troubleshootingLink: string,
+  ): ServiceError | null {
+    const errorData = data.error as { status?: string; message?: string };
+    if (!errorData) return null;
+
+    const isAuthError =
+      errorData.status === 'UNAUTHENTICATED' ||
+      errorData.status === 'PERMISSION_DENIED' ||
+      errorData.message?.includes('API key');
+
+    return {
+      type: isAuthError ? 'secretKey' : 'api',
+      message: errorData.message || 'Gemini API error',
+      addition: errorData.status || '',
+      troubleshootingLink,
+    };
+  }
+
   protected extractErrorFromResponse(
     response: HttpResponse<unknown>,
   ): ServiceError {
-    const data = response.data as {
-      error?: { status?: string; message?: string };
-    };
-    const errorData = data?.error;
-    if (errorData) {
-      const isAuthError =
-        errorData.status === 'UNAUTHENTICATED' ||
-        errorData.status === 'PERMISSION_DENIED' ||
-        errorData.message?.includes('API key');
-
-      return {
-        type: isAuthError ? 'secretKey' : 'api',
-        message: errorData.message || 'Unknown Gemini API error',
-        addition: errorData.status || '',
-        troubleshootingLink: this.config.troubleshootingLink,
-      };
-    }
+    const data = response.data as Record<string, unknown>;
+    const streamError = this.extractStreamError(
+      data,
+      this.config.troubleshootingLink,
+    );
+    if (streamError) return streamError;
 
     return {
       type: 'api',
@@ -145,41 +161,4 @@ export class GeminiAdapter extends BaseAdapter {
     }
   }
 
-  public handleStream(
-    streamData: { text: string },
-    query: TextTranslateQuery,
-    targetText: string,
-  ): string {
-    try {
-      let cleanedText = streamData.text;
-
-      // Remove "data: " prefix if present
-      if (cleanedText.startsWith('data: ')) {
-        cleanedText = cleanedText.slice(5);
-      }
-      // Remove leading comma if present
-      if (cleanedText.startsWith(',')) {
-        cleanedText = cleanedText.slice(1);
-      }
-
-      const parsedChunk = JSON.parse(cleanedText);
-      const text = parsedChunk.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (text) {
-        targetText += text;
-
-        query.onStream({
-          result: {
-            from: query.detectFrom,
-            to: query.detectTo,
-            toParagraphs: [targetText],
-          },
-        });
-      }
-    } catch (_error) {
-      throw new Error('Failed to parse Gemini stream response');
-    }
-
-    return targetText;
-  }
 }
