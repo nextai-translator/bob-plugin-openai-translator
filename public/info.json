@@ -63,24 +63,24 @@
           "value": "custom"
         },
         {
+          "title": "GPT 5.2",
+          "value": "gpt-5.2"
+        },
+        {
+          "title": "GPT 5.1",
+          "value": "gpt-5.1"
+        },
+        {
           "title": "GPT-5 mini",
           "value": "gpt-5-mini"
         },
         {
-          "title": "GPT-5 nano",
-          "value": "gpt-5-nano"
-        },
-        {
-          "title": "GPT-4.1 mini",
-          "value": "gpt-4.1-mini"
+          "title": "Gemini 3 Flash",
+          "value": "gemini-3-flash"
         },
         {
           "title": "Gemini 2.5 Flash",
           "value": "gemini-2.5-flash"
-        },
-        {
-          "title": "Gemini 2.5 Flash-Lite",
-          "value": "gemini-2.5-flash-lite"
         }
       ],
       "title": "模型",
@@ -90,7 +90,7 @@
       "desc": "可选项。当 Model 选择 Custom 时，此项为必填项。请填写有效的模型名称",
       "identifier": "customModel",
       "textConfig": {
-        "placeholderText": "gpt-5-nano",
+        "placeholderText": "gpt-5.2",
         "type": "visible"
       },
       "title": "自定义模型",
@@ -139,8 +139,25 @@
       "type": "menu"
     },
     {
+      "defaultValue": "disable",
+      "desc": "仅部分模型支持通过此设置控制深度思考能力的启用状态。禁用可减少延迟和 token 消耗，适合翻译场景",
+      "identifier": "thinkingMode",
+      "menuValues": [
+        {
+          "title": "Disable",
+          "value": "disable"
+        },
+        {
+          "title": "Enable",
+          "value": "enable"
+        }
+      ],
+      "title": "深度思考",
+      "type": "menu"
+    },
+    {
       "defaultValue": "0.2",
-      "desc": "可选项。温度值越高，生成的文本越随机。默认值为 0.2。GPT-5 系列模型必须设置为 1",
+      "desc": "可选项。温度值越高，生成的文本越随机。默认值为 0.2",
       "identifier": "temperature",
       "textConfig": {
         "placeholderText": "0.2",
@@ -151,5 +168,5 @@
     }
   ],
   "summary": "AI powered translator",
-  "version": "4.0.3"
+  "version": "4.1.0"
 }

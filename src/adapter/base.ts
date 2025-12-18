@@ -27,6 +27,10 @@ export abstract class BaseAdapter implements ServiceAdapter {
     return $option.model === 'custom' ? $option.customModel : $option.model;
   }
 
+  protected isThinkingModeEnabled(): boolean {
+    return $option.thinkingMode === 'enable';
+  }
+
   abstract buildHeaders(apiKey: string): Record<string, string>;
 
   abstract buildRequestBody(query: TextTranslateQuery): Record<string, unknown>;

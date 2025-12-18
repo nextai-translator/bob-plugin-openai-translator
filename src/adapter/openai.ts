@@ -99,13 +99,26 @@ export class OpenAiAdapter extends BaseAdapter {
       '\n\nIMPORTANT: Output the translation directly without any quotation marks or special characters wrapping. Do not add quotes like 『』「」"" around the result.';
     systemPrompt += formattingInstructions;
 
-    return {
-      model: this.getModel(),
-      temperature: this.getTemperature(),
+    const model = this.getModel();
+    const body: Record<string, unknown> = {
+      model,
       stream: this.isStreamEnabled(),
       instructions: systemPrompt,
       input: userPrompt,
     };
+
+    // GPT-5 series models don't support temperature
+    if (!model.includes('gpt-5-')) {
+      body.temperature = this.getTemperature();
+    }
+
+    if (!this.isThinkingModeEnabled()) {
+      // GPT-5 series supports 'minimal', GPT-5.1/5.2 series supports 'none'
+      const effort = model.includes('gpt-5-') ? 'minimal' : 'none';
+      body.reasoning = { effort };
+    }
+
+    return body;
   }
 
   public parseResponse(

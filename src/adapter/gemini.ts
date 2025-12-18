@@ -59,6 +59,20 @@ export class GeminiAdapter extends BaseAdapter {
     const { generatedSystemPrompt, generatedUserPrompt } =
       generatePrompts(query);
 
+    const generationConfig: Record<string, unknown> = {
+      temperature: this.getTemperature(),
+    };
+
+    if (!this.isThinkingModeEnabled()) {
+      const model = this.getModel();
+      // Gemini 3 series uses thinkingLevel, Gemini 2.5 series uses thinkingBudget
+      if (model.includes('gemini-3')) {
+        generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+      } else {
+        generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      }
+    }
+
     return {
       system_instruction: {
         parts: {
@@ -70,12 +84,7 @@ export class GeminiAdapter extends BaseAdapter {
           text: generatedUserPrompt,
         },
       },
-      generationConfig: {
-        temperature: this.getTemperature(),
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-      },
+      generationConfig,
     };
   }
 
