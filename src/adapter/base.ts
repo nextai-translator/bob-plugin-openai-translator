@@ -106,7 +106,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
       result: {
         from: query.detectFrom,
         to: query.detectTo,
-        toParagraphs: text.split('\n'),
+        toParagraphs: text.split(/\n+/),
       },
     });
   }
