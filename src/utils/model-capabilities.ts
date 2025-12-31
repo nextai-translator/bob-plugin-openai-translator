@@ -63,7 +63,11 @@ export const supportsTemperature = (
 };
 
 const geminiSupportsThinking = (model: string): boolean => {
-  return model.includes('thinking') || model.includes('gemini-2.5');
+  return (
+    model.includes('thinking') ||
+    model.includes('gemini-2.5') ||
+    model.includes('gemini-3')
+  );
 };
 
 export const getGeminiMinimalThinkingConfig = (

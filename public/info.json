@@ -73,23 +73,23 @@
           "value": "custom"
         },
         {
-          "title": "GPT 5.2",
+          "title": "gpt-5.2",
           "value": "gpt-5.2"
         },
         {
-          "title": "GPT 5.1",
+          "title": "gpt-5.1",
           "value": "gpt-5.1"
         },
         {
-          "title": "GPT-5 mini",
+          "title": "gpt-5-mini",
           "value": "gpt-5-mini"
         },
         {
-          "title": "Gemini 3 Flash",
-          "value": "gemini-3-flash"
+          "title": "gemini-3-flash-preview",
+          "value": "gemini-3-flash-preview"
         },
         {
-          "title": "Gemini 2.5 Flash",
+          "title": "gemini-2.5-flash",
           "value": "gemini-2.5-flash"
         }
       ],
