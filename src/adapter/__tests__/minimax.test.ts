@@ -173,6 +173,43 @@ describe('MiniMaxAdapter', () => {
       } as any);
       expect(result).toBe('你好');
     });
+
+    it('should strip think tags from response', () => {
+      const adapter = new MiniMaxAdapter();
+      const result = adapter.parseResponse({
+        data: {
+          choices: [
+            {
+              message: {
+                content:
+                  '<think>\nLet me translate this.\n</think>\n\n你好，世界！',
+              },
+            },
+          ],
+        },
+        rawData: '',
+        response: { statusCode: 200, headers: {} },
+      } as any);
+      expect(result).toBe('你好，世界！');
+    });
+
+    it('should handle response without think tags', () => {
+      const adapter = new MiniMaxAdapter();
+      const result = adapter.parseResponse({
+        data: {
+          choices: [
+            {
+              message: {
+                content: '你好，世界！',
+              },
+            },
+          ],
+        },
+        rawData: '',
+        response: { statusCode: 200, headers: {} },
+      } as any);
+      expect(result).toBe('你好，世界！');
+    });
   });
 
   describe('getServiceAdapter dispatch', () => {
