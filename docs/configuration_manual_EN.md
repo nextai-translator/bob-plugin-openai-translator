@@ -16,6 +16,8 @@
 
   - Google Gemini: Use [Google Gemini](https://ai.google.dev/gemini-api/docs) service
 
+  - MiniMax: Use [MiniMax](https://platform.minimax.io/) service, supports MiniMax-M2.7 and MiniMax-M2.7-highspeed models
+
 ### API Base URL
 
 - Optional (OpenAI and Google Gemini) / Required (Azure OpenAI and OpenAI Compatible)
@@ -40,6 +42,18 @@
 
     ```
     https://generativelanguage.googleapis.com/v1beta/models
+    ```
+
+  - MiniMax: Optional, default value:
+
+    ```
+    https://api.minimax.io
+    ```
+
+    For users in China, use:
+
+    ```
+    https://api.minimaxi.com
     ```
 
 ### API Path
@@ -78,6 +92,8 @@
     ```
 
   - Google Gemini: Does not support custom Path, leave empty
+
+  - MiniMax: Defaults to `/v1/chat/completions`, leave empty
 
 ### API KEY
 

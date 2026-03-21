@@ -27,13 +27,17 @@
         {
           "title": "Google Gemini",
           "value": "gemini"
+        },
+        {
+          "title": "MiniMax",
+          "value": "minimax"
         }
       ],
       "title": "Service Provider",
       "type": "menu"
     },
     {
-      "desc": "OpenAI: https://api.openai.com\n\nOpenAI Compatible: https://your-gateway.com\n\nAzure OpenAI: https://RESOURCE_NAME.openai.azure.com\n\nGoogle Gemini: https://generativelanguage.googleapis.com/v1beta/models",
+      "desc": "OpenAI: https://api.openai.com\n\nOpenAI Compatible: https://your-gateway.com\n\nAzure OpenAI: https://RESOURCE_NAME.openai.azure.com\n\nGoogle Gemini: https://generativelanguage.googleapis.com/v1beta/models\n\nMiniMax: https://api.minimax.io (default, leave empty)",
       "identifier": "apiUrl",
       "textConfig": {
         "height": "55",
@@ -91,6 +95,14 @@
         {
           "title": "gemini-2.5-flash",
           "value": "gemini-2.5-flash"
+        },
+        {
+          "title": "MiniMax-M2.7",
+          "value": "MiniMax-M2.7"
+        },
+        {
+          "title": "MiniMax-M2.7-highspeed",
+          "value": "MiniMax-M2.7-highspeed"
         }
       ],
       "title": "模型",

@@ -118,6 +118,7 @@ export interface ServiceAdapterConfig {
 export type ServiceProvider =
   | 'azure-openai'
   | 'gemini'
+  | 'minimax'
   | 'openai'
   | 'openai-compatible';
 
