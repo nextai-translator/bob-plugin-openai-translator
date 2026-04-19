@@ -28,6 +28,6 @@
     "bun": "1.2.19"
   },
   "dependencies": {
-    "eventsource-parser": "3.0.7"
+    "eventsource-parser": "3.0.8"
   }
 }
