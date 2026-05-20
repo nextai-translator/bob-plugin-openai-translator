@@ -22,6 +22,9 @@
     "@biomejs/biome": "2.4.15",
     "@bob-translate/types": "1.1.0",
     "@types/bun": "latest",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.10",
     "typescript": "5.9.3"
   },
   "engines": {
