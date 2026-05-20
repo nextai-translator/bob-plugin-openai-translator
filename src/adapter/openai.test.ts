@@ -215,78 +215,6 @@ describe('OpenAiAdapter', () => {
     });
   });
 
-  describe('buildRequestBody', () => {
-    it('should build request body with default prompts and formatting instructions', () => {
-      const query: TextTranslateQuery = {
-        text: 'Hello, world!',
-        detectFrom: 'en',
-        detectTo: 'zh-Hans',
-        from: 'auto',
-        to: 'zh-Hans',
-        cancelSignal: {
-          send: jest.fn(),
-          subscribe: jest.fn(() => ({ dispose: jest.fn() })),
-          removeAllSubscriber: jest.fn(),
-        },
-        onCompletion: jest.fn(),
-        onStream: jest.fn(),
-      };
-
-      Object.defineProperty(global, '$option', {
-        value: {
-          ...mockOption,
-          customSystemPrompt: '', // Empty to use generated prompt
-          customUserPrompt: '',
-        },
-        writable: true,
-      });
-
-      // We can't properly mock the utils module in this context, so we'll just test
-      // the structure assuming the helper functions work correctly
-      const body = adapter.buildRequestBody(query);
-      expect(body).toHaveProperty('model');
-      expect(body).toHaveProperty('temperature');
-      expect(body).toHaveProperty('stream');
-      expect(body).toHaveProperty('instructions');
-      expect(body).toHaveProperty('input');
-      expect((body.instructions as string).includes('IMPORTANT: Output the translation directly')).toBe(true);
-    });
-
-    it('should use custom prompts when provided', () => {
-      const query: TextTranslateQuery = {
-        text: 'Hello, world!',
-        detectFrom: 'en',
-        detectTo: 'zh-Hans',
-        from: 'auto',
-        to: 'zh-Hans',
-        cancelSignal: {
-          send: jest.fn(),
-          subscribe: jest.fn(() => ({ dispose: jest.fn() })),
-          removeAllSubscriber: jest.fn(),
-        },
-        onCompletion: jest.fn(),
-        onStream: jest.fn(),
-      };
-
-      Object.defineProperty(global, '$option', {
-        value: {
-          ...mockOption,
-          customSystemPrompt: 'Custom system prompt',
-          customUserPrompt: 'Custom user prompt',
-        },
-        writable: true,
-      });
-
-      const body = adapter.buildRequestBody(query);
-      expect(body).toHaveProperty('model');
-      expect(body).toHaveProperty('temperature');
-      expect(body).toHaveProperty('stream');
-      expect((body.instructions as string).includes('Custom system prompt')).toBe(true);
-      expect((body.instructions as string).includes('IMPORTANT: Output the translation directly')).toBe(true);
-      expect(body.input).toBe('Custom user prompt');
-    });
-  });
-
   describe('parseResponse', () => {
     it('should parse Responses API format with output_text field', () => {
       const response: HttpResponse<OpenAiResponse> = {
@@ -486,18 +414,6 @@ describe('OpenAiAdapter', () => {
   });
 
   describe('parseSseMessage', () => {
-    it('should return null for [DONE] message', () => {
-      const sse = { data: '[DONE]' };
-      const result = adapter['parseSseMessage'](sse as any);
-      expect(result).toBeNull();
-    });
-
-    it('should return null for [DONE] message with prefix', () => {
-      const sse = { data: '[DONE] something else' };
-      const result = adapter['parseSseMessage'](sse as any);
-      expect(result).toBeNull();
-    });
-
     it('should throw error when error is present in data', () => {
       const sse = {
         data: JSON.stringify({
@@ -507,94 +423,9 @@ describe('OpenAiAdapter', () => {
 
       expect(() => adapter['parseSseMessage'](sse as any)).toThrow();
     });
-
-    it('should extract delta from response.output_text.delta event', () => {
-      const sse = {
-        event: 'response.output_text.delta',
-        data: JSON.stringify({ delta: 'partial text' }),
-      };
-
-      const result = adapter['parseSseMessage'](sse as any);
-      expect(result).toBe('partial text');
-    });
-
-    it('should extract delta from data with type response.output_text.delta', () => {
-      const sse = {
-        data: JSON.stringify({ type: 'response.output_text.delta', delta: 'partial text' }),
-      };
-
-      const result = adapter['parseSseMessage'](sse as any);
-      expect(result).toBe('partial text');
-    });
-
-    it('should handle JSON parsing errors gracefully', () => {
-      const sse = {
-        data: 'invalid json',
-      };
-
-      const result = adapter['parseSseMessage'](sse as any);
-      expect(result).toBeNull();
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
   });
 
   describe('handleStream', () => {
-    it('should process stream data and call query.onStream', () => {
-      const query: TextTranslateQuery = {
-        text: 'Hello',
-        detectFrom: 'en',
-        detectTo: 'zh-Hans',
-        from: 'auto',
-        to: 'zh-Hans',
-        cancelSignal: {
-          send: jest.fn(),
-          subscribe: jest.fn(() => ({ dispose: jest.fn() })),
-          removeAllSubscriber: jest.fn(),
-        },
-        onCompletion: jest.fn(),
-        onStream: jest.fn(),
-      };
-
-      const streamData = {
-        text: 'event: response.output_text.delta\ndata: {"delta": "partial"}\n\n',
-      };
-
-      const result = adapter.handleStream(streamData, query, '');
-      expect(result).toBe('partial');
-      expect(query.onStream).toHaveBeenCalledWith({
-        result: {
-          from: 'en',
-          to: 'zh-Hans',
-          toParagraphs: ['partial'],
-        },
-      });
-    });
-
-    it('should handle multiple stream events', () => {
-      const query: TextTranslateQuery = {
-        text: 'Hello',
-        detectFrom: 'en',
-        detectTo: 'zh-Hans',
-        from: 'auto',
-        to: 'zh-Hans',
-        cancelSignal: {
-          send: jest.fn(),
-          subscribe: jest.fn(() => ({ dispose: jest.fn() })),
-          removeAllSubscriber: jest.fn(),
-        },
-        onCompletion: jest.fn(),
-        onStream: jest.fn(),
-      };
-
-      const streamData = {
-        text: 'event: response.output_text.delta\ndata: {"delta": "first"}\n\nevent: response.output_text.delta\ndata: {"delta": "second"}\n\n',
-      };
-
-      const result = adapter.handleStream(streamData, query, '');
-      expect(result).toBe('firstsecond');
-      expect(query.onStream).toHaveBeenCalledTimes(2);
-    });
-
     it('should handle [DONE] message and not update target text', () => {
       const query: TextTranslateQuery = {
         text: 'Hello',

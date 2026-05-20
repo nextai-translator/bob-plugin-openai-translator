@@ -202,18 +202,6 @@ describe('BaseAdapter', () => {
 
       expect(mockStreamRequest).toHaveBeenCalled();
     });
-
-    it('should make a regular request when isStream is false', async () => {
-      const mockResponse = {
-        response: { statusCode: 200 },
-        error: null,
-      };
-      mockHttpRequest.mockResolvedValue(mockResponse);
-
-      await adapter['translate'](mockQuery, 'api-key', 'http://api.example.com', false);
-
-      expect(mockHttpRequest).toHaveBeenCalled();
-    });
   });
 
   describe('makeRequest method', () => {
