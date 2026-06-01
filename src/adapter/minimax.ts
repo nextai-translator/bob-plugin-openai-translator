@@ -60,7 +60,7 @@ export class MiniMaxAdapter extends OpenAiAdapter {
         url,
         header,
         body: {
-          model: 'MiniMax-M2.7',
+          model: 'MiniMax-M3',
           messages: [
             { role: 'user', content: "Test connectivity. Reply with 'OK'." },
           ],

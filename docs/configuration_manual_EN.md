@@ -16,7 +16,7 @@
 
   - Google Gemini: Use [Google Gemini](https://ai.google.dev/gemini-api/docs) service
 
-  - MiniMax: Use [MiniMax](https://platform.minimax.io/) service, supports MiniMax-M2.7 and MiniMax-M2.7-highspeed models
+  - MiniMax: Use [MiniMax](https://platform.minimax.io/) service, supports MiniMax-M3, MiniMax-M2.7 and MiniMax-M2.7-highspeed models
 
 ### API Base URL
 

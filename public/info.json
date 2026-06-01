@@ -97,6 +97,10 @@
           "value": "gemini-2.5-flash"
         },
         {
+          "title": "MiniMax-M3",
+          "value": "MiniMax-M3"
+        },
+        {
           "title": "MiniMax-M2.7",
           "value": "MiniMax-M2.7"
         },

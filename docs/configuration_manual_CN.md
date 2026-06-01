@@ -16,7 +16,7 @@
 
   - Google Gemini：使用 [Google Gemini](https://ai.google.dev/gemini-api/docs) 服务
 
-  - MiniMax：使用 [MiniMax](https://platform.minimax.io/) 服务，支持 MiniMax-M2.7 和 MiniMax-M2.7-highspeed 模型
+  - MiniMax：使用 [MiniMax](https://platform.minimax.io/) 服务，支持 MiniMax-M3、MiniMax-M2.7 和 MiniMax-M2.7-highspeed 模型
 
 
 ### API Base URL

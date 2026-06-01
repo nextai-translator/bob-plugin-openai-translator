@@ -64,7 +64,7 @@ describe('MiniMaxAdapter', () => {
   describe('temperature clamping', () => {
     it('should clamp temperature 0 to 0.01', () => {
       mockOption.temperature = '0';
-      mockOption.model = 'MiniMax-M2.7';
+      mockOption.model = 'MiniMax-M3';
       const adapter = new MiniMaxAdapter();
       const body = adapter.buildRequestBody({
         text: 'hello',
@@ -76,7 +76,7 @@ describe('MiniMaxAdapter', () => {
 
     it('should clamp negative temperature to 0.01', () => {
       mockOption.temperature = '-0.5';
-      mockOption.model = 'MiniMax-M2.7';
+      mockOption.model = 'MiniMax-M3';
       const adapter = new MiniMaxAdapter();
       const body = adapter.buildRequestBody({
         text: 'hello',
@@ -88,7 +88,7 @@ describe('MiniMaxAdapter', () => {
 
     it('should clamp temperature above 1 to 1.0', () => {
       mockOption.temperature = '1.5';
-      mockOption.model = 'MiniMax-M2.7';
+      mockOption.model = 'MiniMax-M3';
       const adapter = new MiniMaxAdapter();
       const body = adapter.buildRequestBody({
         text: 'hello',
@@ -100,7 +100,7 @@ describe('MiniMaxAdapter', () => {
 
     it('should keep valid temperature unchanged', () => {
       mockOption.temperature = '0.5';
-      mockOption.model = 'MiniMax-M2.7';
+      mockOption.model = 'MiniMax-M3';
       const adapter = new MiniMaxAdapter();
       const body = adapter.buildRequestBody({
         text: 'hello',
@@ -122,7 +122,7 @@ describe('MiniMaxAdapter', () => {
 
   describe('buildRequestBody', () => {
     it('should build Chat Completions API request body', () => {
-      mockOption.model = 'MiniMax-M2.7';
+      mockOption.model = 'MiniMax-M3';
       mockOption.temperature = '0.2';
       mockOption.stream = 'enable';
       const adapter = new MiniMaxAdapter();
@@ -132,7 +132,7 @@ describe('MiniMaxAdapter', () => {
         detectTo: 'zh-Hans',
       } as any);
 
-      expect(body.model).toBe('MiniMax-M2.7');
+      expect(body.model).toBe('MiniMax-M3');
       expect(body.stream).toBe(true);
       expect(body.messages).toBeDefined();
       expect(Array.isArray(body.messages)).toBe(true);
@@ -221,7 +221,7 @@ describe('MiniMaxAdapter', () => {
 
   describe('Chat Completions API format', () => {
     it('should always use Chat Completions API format by default', () => {
-      mockOption.model = 'MiniMax-M2.7';
+      mockOption.model = 'MiniMax-M3';
       mockOption.temperature = '0.5';
       const adapter = new MiniMaxAdapter();
       const body = adapter.buildRequestBody({
@@ -285,7 +285,7 @@ describe('MiniMaxAdapter integration', () => {
   });
 
   it('should build correct full request for translation', () => {
-    mockOption.model = 'MiniMax-M2.7';
+    mockOption.model = 'MiniMax-M3';
     mockOption.temperature = '0.2';
     mockOption.stream = 'disable';
 
@@ -300,7 +300,7 @@ describe('MiniMaxAdapter integration', () => {
 
     expect(url).toBe('https://api.minimax.io/v1/chat/completions');
     expect(headers.Authorization).toBe('Bearer test-key');
-    expect(body.model).toBe('MiniMax-M2.7');
+    expect(body.model).toBe('MiniMax-M3');
     expect(body.stream).toBe(false);
     expect(body.temperature).toBe(0.2);
   });

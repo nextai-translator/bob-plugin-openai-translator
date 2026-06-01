@@ -31,7 +31,7 @@ describe('MiniMax API integration', { timeout: 30000 }, () => {
             Authorization: `Bearer ${MINIMAX_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'MiniMax-M2.7',
+            model: 'MiniMax-M3',
             messages: [
               {
                 role: 'system',
@@ -136,7 +136,7 @@ describe('MiniMax API integration', { timeout: 30000 }, () => {
             Authorization: `Bearer ${MINIMAX_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'MiniMax-M2.7',
+            model: 'MiniMax-M3',
             messages: [
               { role: 'user', content: "Test connectivity. Reply with 'OK'." },
             ],
