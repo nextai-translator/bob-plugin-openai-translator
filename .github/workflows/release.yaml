@@ -19,7 +19,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
         with:
           fetch-depth: 0
 
@@ -44,7 +44,7 @@ jobs:
           OLD_VERSION=$(grep '"version":' public/info.json | awk -F\" '{print $4}')
           sed -i "s/$OLD_VERSION/${{ env.VERSION_NUMBER }}/" public/info.json
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: latest
 
@@ -75,7 +75,7 @@ jobs:
           tags: true
 
       - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@2.11.5
         with:
           release_name: ${{ env.VERSION }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
