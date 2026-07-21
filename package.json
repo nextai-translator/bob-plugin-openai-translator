@@ -19,7 +19,7 @@
     "lint:fix": "biome check --write --unsafe ."
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.4",
+    "@biomejs/biome": "2.5.5",
     "@bob-translate/types": "1.1.0",
     "@types/bun": "latest",
     "typescript": "7.0.2"
