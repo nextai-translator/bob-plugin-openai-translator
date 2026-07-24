@@ -1,87 +1,88 @@
 import type {
-  HttpResponse,
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
-import type { GeminiResponse, OpenAiResponse } from '../types';
-import { handleValidateError } from '../utils/error';
+import type { EventSourceMessage } from 'eventsource-parser';
+import { resolveModelControls } from '../utils/model-capabilities';
 import { OpenAiAdapter } from './openai';
 
 export class MiniMaxAdapter extends OpenAiAdapter {
-  constructor() {
-    super({
-      troubleshootingLink:
-        'https://platform.minimax.io/docs/api-reference/text-openai-api',
-      baseUrl: $option.apiUrl || 'https://api.minimax.io',
-    });
+  private streamedText = '';
+
+  protected override extractStreamDelta(
+    data: Record<string, unknown>,
+    event: EventSourceMessage,
+  ): string | null {
+    const content = super.extractStreamDelta(data, event);
+    if (!content) return null;
+
+    const isCumulative = content.startsWith(this.streamedText);
+    const delta = isCumulative
+      ? content.slice(this.streamedText.length)
+      : content;
+    this.streamedText = isCumulative ? content : this.streamedText + content;
+    return delta || null;
   }
 
-  protected override getApiPath(): string {
-    return $option.apiPath || '/v1/chat/completions';
+  public override buildRequestBody(
+    query: TextTranslateQuery,
+  ): Record<string, unknown> {
+    this.streamedText = '';
+    const body = super.buildRequestBody(query);
+    body.reasoning_split = true;
+    const controls = resolveModelControls(
+      this.config.provider,
+      this.config.model,
+      this.config.reasoningMode,
+    );
+    if (controls.miniMaxThinking) {
+      body.thinking = { type: controls.miniMaxThinking };
+    }
+    return body;
   }
 
-  protected override getTemperature(): number {
-    const temp = Number($option.temperature) ?? 0.2;
-    // MiniMax requires temperature in (0.0, 1.0]
-    if (temp <= 0) return 0.01;
-    if (temp > 1) return 1.0;
-    return temp;
+  protected override completeWithText(
+    query: TextTranslateQuery,
+    text: string,
+  ): void {
+    super.completeWithText(query, this.stripThinkTags(text));
+  }
+
+  public override testApiConnection(
+    apiKey: string,
+    completion: ValidationCompletion,
+  ): Promise<void> {
+    const body: Record<string, unknown> = {
+      model: this.config.model,
+      messages: [{ role: 'user', content: 'Reply with OK.' }],
+      reasoning_split: true,
+      stream: false,
+    };
+    const controls = resolveModelControls(
+      this.config.provider,
+      this.config.model,
+      'disable',
+    );
+    if (controls.miniMaxThinking) {
+      body.max_completion_tokens = 8;
+      body.thinking = { type: controls.miniMaxThinking };
+    }
+
+    return this.validateConnection(
+      {
+        method: 'POST',
+        url: this.config.endpoint,
+        header: this.buildHeaders(apiKey),
+        body,
+      },
+      completion,
+      (response) => {
+        this.parseResponse(response);
+      },
+    );
   }
 
   private stripThinkTags(text: string): string {
     return text.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
-  }
-
-  public override parseResponse(
-    response: HttpResponse<GeminiResponse | OpenAiResponse>,
-  ): string {
-    const text = super.parseResponse(response);
-    return this.stripThinkTags(text);
-  }
-
-  protected override handleStreamCompletion(
-    query: TextTranslateQuery,
-    targetText: string,
-  ) {
-    super.handleStreamCompletion(query, this.stripThinkTags(targetText));
-  }
-
-  public override async testApiConnection(
-    apiKey: string,
-    _apiUrl: string,
-    completion: ValidationCompletion,
-  ): Promise<void> {
-    const header = this.buildHeaders(apiKey);
-    const url = this.getTextGenerationUrl();
-
-    try {
-      const response = await $http.request({
-        method: 'POST',
-        url,
-        header,
-        body: {
-          model: 'MiniMax-M3',
-          messages: [
-            { role: 'user', content: "Test connectivity. Reply with 'OK'." },
-          ],
-          max_tokens: 10,
-          temperature: 1.0,
-        },
-      });
-
-      const responseData = response.data;
-      if (responseData?.error) {
-        return handleValidateError(
-          completion,
-          this.extractErrorFromResponse(response),
-        );
-      }
-
-      if (responseData?.choices) {
-        return completion({ result: true });
-      }
-    } catch (error) {
-      handleValidateError(completion, error);
-    }
   }
 }

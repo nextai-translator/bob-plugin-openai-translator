@@ -1,105 +1,83 @@
 import type {
-  HttpResponse,
   ServiceError,
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
-import type { TypeCheckConfig } from '../types';
 
-const createTypeGuard = <T>(config: TypeCheckConfig) => {
-  return (value: unknown): value is T => {
-    if (!value || typeof value !== 'object') {
-      return false;
-    }
+export const isServiceError = (value: unknown): value is ServiceError =>
+  Boolean(
+    value &&
+      typeof value === 'object' &&
+      'type' in value &&
+      typeof value.type === 'string' &&
+      'message' in value &&
+      typeof value.message === 'string',
+  );
 
-    return Object.entries(config).every(([key, check]) => {
-      if (!(key in value)) {
-        return check.optional ?? false;
-      }
-
-      const fieldValue = (value as Record<string, unknown>)[key];
-      if (check.nullable && fieldValue === null) {
-        return true;
-      }
-
-      return typeof fieldValue === check.type;
-    });
-  };
+const serialize = (value: unknown): string => {
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined ? String(value) : serialized;
+  } catch {
+    return String(value);
+  }
 };
-
-const hasServiceErrorShape = createTypeGuard<ServiceError>({
-  type: { type: 'string' },
-  message: { type: 'string' },
-  addition: { type: 'string', optional: true },
-  troubleshootingLink: { type: 'string', optional: true },
-});
-
-export const isServiceError = createTypeGuard<ServiceError>({
-  type: { type: 'string' },
-  message: { type: 'string' },
-});
 
 export const convertToServiceError = (
   error: unknown,
   defaultMessage = '未知错误',
 ): ServiceError => {
-  const generalServiceError: ServiceError = {
-    type: 'api',
-    message: defaultMessage,
-    addition: JSON.stringify(error),
-  };
-
-  if (!error || typeof error !== 'object') {
-    return {
-      ...generalServiceError,
-      type: 'unknown',
-    };
-  }
-
-  if (hasServiceErrorShape(error)) {
-    return error;
-  }
-
+  if (isServiceError(error)) return error;
   if (error instanceof Error) {
     return {
-      ...generalServiceError,
-      message: error.message,
+      type: 'api',
+      message: error.message || defaultMessage,
     };
   }
-
-  return generalServiceError;
+  if (typeof error === 'string') {
+    return {
+      type: 'unknown',
+      message: error || defaultMessage,
+    };
+  }
+  if (error && typeof error === 'object') {
+    const candidate = error as Record<string, unknown>;
+    const message =
+      typeof candidate.message === 'string'
+        ? candidate.message
+        : typeof candidate.localizedDescription === 'string'
+          ? candidate.localizedDescription
+          : '';
+    if (message) {
+      return {
+        type: 'unknown',
+        message,
+        addition: serialize(error),
+      };
+    }
+  }
+  return {
+    type: 'unknown',
+    message: defaultMessage,
+    addition: serialize(error),
+  };
 };
 
 export const handleGeneralError = (
   query: TextTranslateQuery,
-  error: unknown | ServiceError | HttpResponse,
-) => {
-  if (error && typeof error === 'object' && 'response' in error) {
-    // 如果是 HttpResponse，创建包含详细错误信息的 ServiceError
-    const httpError = error as HttpResponse;
-    const serviceError: ServiceError = {
-      type: 'api',
-      message: 'API 返回了错误响应',
-      addition: JSON.stringify({
-        status: httpError.response.statusCode,
-        data: httpError.data,
-      }),
-    };
-    query.onCompletion({ error: serviceError });
-    return;
-  }
-
+  error: unknown,
+): void => {
   query.onCompletion({
-    error: isServiceError(error) ? error : convertToServiceError(error),
+    error: convertToServiceError(error),
   });
 };
 
 export const handleValidateError = (
   completion: ValidationCompletion,
   error: unknown,
-) => {
+): void => {
   completion({
     result: false,
-    error: isServiceError(error) ? error : convertToServiceError(error),
+    error: convertToServiceError(error),
   });
 };

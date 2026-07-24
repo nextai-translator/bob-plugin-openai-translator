@@ -1,55 +1,65 @@
-# How To Contribute
+# Contributing
 
-## Triage Issues and Help Out in Discussions
+This guide is for people changing the plugin. For installation or configuration help, start with the [configuration manual](../docs/configuration_manual_EN.md). Use [Issues](https://github.com/nextai-translator/bob-plugin-openai-translator/issues) for reproducible bugs and [Discussions](https://github.com/nextai-translator/bob-plugin-openai-translator/discussions) for usage questions or proposed features.
 
-Check out the issues and discussions for the project you want to help. For example, here are [the issues](https://github.com/nextai-translator/bob-plugin-openai-translator/issues) board and [discussions](https://github.com/nextai-translator/bob-plugin-openai-translator/discussions) for OpenAI Translator Bob Plugin. Helping other users, sharing workarounds, creating reproductions, or even poking into a bug a little bit and sharing your findings makes a huge difference.
+## Before you start
 
-## Creating an Issue
+- Search existing issues and discussions.
+- Include a reproduction when fixing a bug.
+- Discuss new user-facing behavior before implementing it.
+- Keep a pull request focused on one change.
 
-Thank you for taking the time to create an issue! 🥰
+Small documentation fixes and contained maintenance changes can go directly to a pull request.
 
-- **Reporting bugs**: One of the most valuable roles in open source is taking the time to report bugs helpfully.
+## Set up the repository
 
-- **Feature requests**: Check that there is not an existing issue or discussion covering the scope of the feature you have in mind.
+Use the Bun version declared in `package.json`, then install dependencies:
 
-We will do our best to solve the issues.
+```bash
+bun install
+```
 
-## Send a Pull Request
+Bob runs the built plugin in JavaScriptCore, not Node.js or a browser. Runtime code can use JavaScript built-ins, Bob globals, and bundled pure JavaScript. It cannot use Node.js APIs, browser APIs such as `fetch`, provider SDKs, or files outside the plugin package.
 
-We always welcome pull requests! 🥰
+Read the [architecture notes](../docs/architecture.md) before changing configuration, providers, model capabilities, requests, or streaming.
 
-### Before You Start
+## Find the owning code
 
-Before you fix a bug, we recommend that you check whether **there's an issue that describes it**, as it's possible it's a documentation issue or that there is some context that would be helpful to know.
+| Change | Start here |
+| --- | --- |
+| Settings shown in Bob | `public/info.json`, `src/config.ts` |
+| Built-in models or reasoning behavior | `src/utils/model-capabilities.ts` |
+| Prompt behavior | `src/utils/prompt.ts` |
+| Provider request or response format | `src/adapter/` |
+| Cancellation, completion, or SSE handling | `src/adapter/base.ts`, `src/utils/sse.ts` |
+| User guidance | `README.md`, `docs/configuration_manual_*.md` |
 
-If you're working on a feature, then we ask that you **open a feature request issue first** to discuss with the maintainers whether the feature is desired - and the design of those features. This helps save time for both the maintainers and the contributors and means that features can be shipped faster. 
+When adding a model, verify its current official API documentation, update both `MODEL_CATALOG` and the sorted menu in `public/info.json`, then add capability and request-body tests. Unknown models must not receive speculative optional parameters.
 
-For typo fixes, it's recommended to batch multiple typo fixes into one pull request to maintain a cleaner commit history.
+When adding a provider, keep its URL, authentication, payload, response, error, streaming, and validation behavior in one adapter. Reuse the shared transport and keep provider selection internal unless a documented provider contract requires a different boundary.
 
-### Commit Conventions
+## Validate the change
 
-We use [Conventional Commits](https://www.conventionalcommits.org) for commit messages. Please read the guide through if you aren't familiar with it already.
-Note that `fix:` and `feat:` are for actual code changes (that might affect logic). For typo or document changes, use `docs:` or `chore:` instead:
-- ~~`fix: typo`~~ -> `docs: fix typo`
+Every change should pass:
 
-### Making the Pull Request
+```bash
+bun run lint
+bun run test
+git diff --check
+```
 
-If you don't know how to send a pull request, we recommend reading [the guide](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request).
+`bun run lint` includes Biome and TypeScript checking.
 
-When sending a pull request, make sure your PR's title also follows the [Commit Convention](https://www.conventionalcommits.org).
+For runtime changes, create a fresh local package:
 
-If your PR fixes or resolves existing issues, please make sure you mention them in the PR description.
+```bash
+bun run package
+```
 
-It's ok to have multiple commits in a single PR; you don't need to rebase or force push for your changes as we will use **`Squash and Merge`** to squash the commits into one commit when merging.
+This command builds the plugin, checks Bob runtime compatibility, and creates `dist/openai-translator-dev.bobplugin`. Its generated version extends the repository version only inside the archive, so repeated local builds can be installed without consuming the next stable version. Install it in Bob and verify the affected settings and behavior. Changes to request handling require one streaming and one non-streaming translation.
 
-We do not add any commit hooks to allow for quick commits. But before you make a pull request, you should ensure that any lint/test scripts are passing.
+Run `bun run benchmark` when a change can affect a local hot path or bundle size. Live-provider cases are part of `bun run test` but stay skipped unless `RUN_LIVE_TESTS=1` and the corresponding API Key are explicitly supplied. Tests must never read local credential files.
 
-In general, please also make sure that there are no unrelated changes in a PR. For example, if your editor has made any changes to whitespace or formatting elsewhere in a file that you edited, please revert these so it is more obvious what your PR changes. And please avoid including multiple unrelated features or fixes in a single PR.
-If it is possible to separate them, it is better to have multiple PRs to review and merge separately. In general, a PR should do **one thing only**.
+## Open the pull request
 
-### Once You've Made a Pull Request
-
-Once you've made a pull request, we'll do our best to review it promptly.
-If we assign it to a maintainer, then that means that person will take special care to review it and implement any changes that may be required.
-
-We'll do our best to respond and review pull requests as soon as possible.
+Use a [Conventional Commit](https://www.conventionalcommits.org/) title. In the description, state the user-visible or runtime behavior changed, list the validation performed, and link any related issue. Do not include unrelated formatting or generated-file changes.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
+import { cp, mkdir, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { $ } from 'bun';
 
 const rootDir = path.resolve(import.meta.dir, '..');
 const srcDir = path.resolve(rootDir, 'src');
@@ -11,29 +11,26 @@ const publicDir = path.resolve(rootDir, 'public');
 async function build() {
   console.log('Building plugin...');
 
-  // Clean dist directory
-  await $`rm -rf ${distDir}`;
-  await $`mkdir -p ${distDir}`;
+  await rm(distDir, { recursive: true, force: true });
+  await mkdir(distDir, { recursive: true });
 
-  // Build TypeScript to CommonJS (Bob requires CommonJS)
-  await Bun.build({
+  const result = await Bun.build({
     entrypoints: [path.join(srcDir, 'main.ts')],
     outdir: distDir,
-    target: 'node',
+    target: 'browser',
     format: 'cjs',
+    minify: true,
     naming: '[name].js',
-    external: ['crypto'],
   });
+  if (!result.success) {
+    throw new AggregateError(result.logs, 'Plugin bundle failed');
+  }
 
-  // Copy public files to dist
   console.log('Copying public files...');
-  const glob = new Bun.Glob('*');
-  for await (const file of glob.scan({ cwd: publicDir })) {
-    const sourcePath = path.resolve(publicDir, file);
-    const destPath = path.resolve(distDir, file);
-
-    const sourceFile = Bun.file(sourcePath);
-    await Bun.write(destPath, sourceFile);
+  for (const file of await readdir(publicDir)) {
+    await cp(path.resolve(publicDir, file), path.resolve(distDir, file), {
+      recursive: true,
+    });
   }
 
   console.log('Build complete!');

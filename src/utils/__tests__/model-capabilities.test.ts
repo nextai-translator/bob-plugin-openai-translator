@@ -1,57 +1,102 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  getDefaultReasoningEffort,
-  getThinkingReasoningEffort,
+  getCatalogModelProvider,
+  MODEL_CATALOG,
+  resolveModelControls,
 } from '../model-capabilities';
 
-describe('getDefaultReasoningEffort (Thinking Mode off floor)', () => {
-  it('returns high for the original gpt-5-pro, which is high-only', () => {
-    expect(getDefaultReasoningEffort('gpt-5-pro')).toBe('high');
-    expect(getDefaultReasoningEffort('gpt-5-pro-2026-01-15')).toBe('high');
+describe('model catalog', () => {
+  it('contains unique model ids', () => {
+    const ids = MODEL_CATALOG.map((model) => model.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('returns medium for dotted pro variants', () => {
-    expect(getDefaultReasoningEffort('gpt-5.4-pro')).toBe('medium');
-    expect(getDefaultReasoningEffort('gpt-5.5-pro')).toBe('medium');
-  });
-
-  it('returns low for dotted non-pro versions', () => {
-    expect(getDefaultReasoningEffort('gpt-5.5')).toBe('low');
-    expect(getDefaultReasoningEffort('gpt-5.4-mini')).toBe('low');
-    expect(getDefaultReasoningEffort('gpt-5.1')).toBe('low');
-  });
-
-  it('returns minimal for the original gpt-5 family', () => {
-    expect(getDefaultReasoningEffort('gpt-5')).toBe('minimal');
-    expect(getDefaultReasoningEffort('gpt-5-mini')).toBe('minimal');
-    expect(getDefaultReasoningEffort('gpt-5-nano')).toBe('minimal');
-  });
-
-  it('does not misread gpt-5-proto as a pro variant', () => {
-    expect(getDefaultReasoningEffort('gpt-5-proto')).toBe('minimal');
-  });
-
-  it('returns undefined for non-reasoning and third-party models', () => {
-    expect(getDefaultReasoningEffort('gpt-4o')).toBeUndefined();
-    expect(getDefaultReasoningEffort('MiniMax-M3')).toBeUndefined();
-    expect(getDefaultReasoningEffort('claude-3-pro')).toBeUndefined();
+  it('maps every curated model to its provider', () => {
+    for (const model of MODEL_CATALOG) {
+      expect(getCatalogModelProvider(model.id)).toBe(model.provider);
+    }
+    expect(getCatalogModelProvider('custom-model')).toBeUndefined();
   });
 });
 
-describe('getThinkingReasoningEffort (Thinking Mode on)', () => {
-  it('keeps gpt-5-pro at high instead of downgrading below its floor', () => {
-    // Regression guard: a flat 'medium' here is rejected by gpt-5-pro (high-only).
-    expect(getThinkingReasoningEffort('gpt-5-pro')).toBe('high');
-    expect(getThinkingReasoningEffort('gpt-5-pro-2026-01-15')).toBe('high');
+describe('resolveModelControls', () => {
+  it('omits all reasoning controls in default mode', () => {
+    for (const model of MODEL_CATALOG) {
+      expect(resolveModelControls(model.provider, model.id, 'default')).toEqual(
+        {},
+      );
+    }
   });
 
-  it('bumps lower-floor reasoning models up to medium', () => {
-    expect(getThinkingReasoningEffort('gpt-5')).toBe('medium'); // floor minimal
-    expect(getThinkingReasoningEffort('gpt-5.4-mini')).toBe('medium'); // floor low
-    expect(getThinkingReasoningEffort('gpt-5.4-pro')).toBe('medium'); // floor medium
+  it('maps current GPT models to supported reasoning efforts', () => {
+    expect(resolveModelControls('openai', 'gpt-5.6-luna', 'disable')).toEqual({
+      openAiReasoningEffort: 'none',
+    });
+    expect(resolveModelControls('openai', 'gpt-5.4-mini', 'disable')).toEqual({
+      openAiReasoningEffort: 'none',
+    });
   });
 
-  it('returns medium for non-reasoning models', () => {
-    expect(getThinkingReasoningEffort('gpt-4o')).toBe('medium');
+  it('keeps the original GPT-5 family within its supported floor', () => {
+    expect(resolveModelControls('openai', 'gpt-5', 'disable')).toEqual({
+      openAiReasoningEffort: 'minimal',
+    });
+    expect(resolveModelControls('openai', 'gpt-5-pro', 'disable')).toEqual({
+      openAiReasoningEffort: 'high',
+    });
+    expect(resolveModelControls('openai', 'gpt-5.3-codex', 'disable')).toEqual({
+      openAiReasoningEffort: 'low',
+    });
+  });
+
+  it('does not infer controls from model name prefixes', () => {
+    expect(resolveModelControls('openai', 'gpt-4o', 'disable')).toEqual({});
+    expect(
+      resolveModelControls('openai-compatible', 'custom-model', 'disable'),
+    ).toEqual({});
+    expect(
+      resolveModelControls('openai', 'gpt-5.3-codex-snapshot', 'disable'),
+    ).toEqual({});
+    expect(
+      resolveModelControls('gemini', 'gemini-3.2-experimental', 'disable'),
+    ).toEqual({});
+    expect(
+      resolveModelControls('minimax', 'MiniMax-M3-preview', 'disable'),
+    ).toEqual({});
+    expect(
+      resolveModelControls('openai-compatible', 'constructor', 'disable'),
+    ).toEqual({});
+  });
+
+  it('maps Gemini thinking without adding sampling parameters', () => {
+    expect(
+      resolveModelControls('gemini', 'gemini-3.6-flash', 'disable'),
+    ).toEqual({
+      geminiThinking: { thinkingLevel: 'minimal' },
+    });
+    expect(resolveModelControls('gemini', 'gemini-2.5-pro', 'disable')).toEqual(
+      {
+        geminiThinking: { thinkingBudget: 128 },
+      },
+    );
+    expect(
+      resolveModelControls('gemini', 'gemini-2.5-flash', 'disable'),
+    ).toEqual({
+      geminiThinking: { thinkingBudget: 0 },
+    });
+    expect(
+      resolveModelControls('gemini', 'gemini-3.1-pro-preview', 'disable'),
+    ).toEqual({
+      geminiThinking: { thinkingLevel: 'low' },
+    });
+  });
+
+  it('maps MiniMax M3 thinking and omits unsupported M2 controls', () => {
+    expect(resolveModelControls('minimax', 'MiniMax-M3', 'disable')).toEqual({
+      miniMaxThinking: 'disabled',
+    });
+    expect(
+      resolveModelControls('minimax', 'MiniMax-M2.7-highspeed', 'disable'),
+    ).toEqual({});
   });
 });

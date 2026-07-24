@@ -1,7 +1,8 @@
 {
   "name": "bob-plugin-openai-translator",
-  "version": "1.0.0",
-  "description": "基于 OpenAI API 的文本翻译、文本润色、语法纠错 Bob 插件，让我们一起迎接不需要巴别塔的新时代！",
+  "version": "4.3.4",
+  "private": true,
+  "description": "Multi-provider AI translation, polishing, and grammar correction for Bob.",
   "type": "module",
   "license": "CC BY-NC-SA 4.0",
   "main": "dist/main.js",
@@ -12,16 +13,20 @@
   ],
   "homepage": "https://github.com/nextai-translator/bob-plugin-openai-translator",
   "scripts": {
+    "benchmark": "bun run build && bun scripts/benchmark.mts",
     "build": "bun scripts/build.mts",
-    "dev": "bun scripts/package.mts",
+    "check:runtime": "bun scripts/check-runtime.mts",
+    "lint": "biome check . && tsc --noEmit",
+    "lint:fix": "biome check --write . && tsc --noEmit",
+    "package": "bun scripts/package.mts",
     "release": "bun scripts/package.mts release",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write --unsafe ."
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",
     "@bob-translate/types": "1.1.0",
-    "@types/bun": "latest",
+    "@types/bun": "1.2.19",
     "typescript": "7.0.2"
   },
   "engines": {

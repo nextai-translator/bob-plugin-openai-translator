@@ -3,6 +3,7 @@ import {
   createParser,
   type EventSourceMessage,
   type EventSourceParser,
+  type ParseError,
 } from 'eventsource-parser';
 
 export type DeltaExtractor = (
@@ -15,84 +16,157 @@ export type ErrorExtractor = (
   troubleshootingLink: string,
 ) => ServiceError | null;
 
+export type CompletionDetector = (
+  data: Record<string, unknown>,
+  event: EventSourceMessage,
+) => boolean;
+
 interface SseStreamHandlerConfig {
   extractDelta: DeltaExtractor;
   extractError: ErrorExtractor;
+  isComplete: CompletionDetector;
   troubleshootingLink: string;
 }
 
-interface StreamState {
-  targetText: string;
-  query: TextTranslateQuery | null;
-  error: ServiceError | null;
-}
+const MAX_SSE_BUFFER_SIZE = 1024 * 1024;
 
 export class SseStreamHandler {
+  private complete = false;
+  private error: ServiceError | null = null;
   private parser: EventSourceParser | null = null;
-  private state: StreamState = { targetText: '', query: null, error: null };
-  private readonly config: SseStreamHandlerConfig;
+  private providerError: ServiceError | null = null;
+  private query: TextTranslateQuery | null = null;
+  private targetText = '';
 
-  constructor(config: SseStreamHandlerConfig) {
-    this.config = config;
-  }
+  constructor(private readonly config: SseStreamHandlerConfig) {}
 
-  reset(): void {
-    this.state = { targetText: '', query: null, error: null };
+  reset(query: TextTranslateQuery): void {
+    this.complete = false;
+    this.error = null;
+    this.providerError = null;
+    this.query = query;
+    this.targetText = '';
     this.parser = createParser({
+      maxBufferSize: MAX_SSE_BUFFER_SIZE,
+      onError: (error) => this.handleParseError(error),
       onEvent: (event) => this.handleEvent(event),
     });
   }
 
-  feed(
-    text: string,
-    query: TextTranslateQuery,
-    currentTargetText: string,
-  ): string {
-    this.state.query = query;
-    this.state.targetText = currentTargetText;
-
-    this.parser?.feed(text);
-
-    if (this.state.error) {
-      throw this.state.error;
+  feed(text: string): void {
+    if (this.error) return;
+    try {
+      this.parser?.feed(text);
+    } catch (error) {
+      this.error = this.createProtocolError(
+        error instanceof Error ? error.message : 'Invalid SSE stream',
+      );
     }
-
-    return this.state.targetText;
   }
 
-  private handleEvent(event: EventSourceMessage): void {
-    // Ignore [DONE] messages
-    if (event.data === '[DONE]' || event.data.startsWith('[DONE]')) {
+  finish(): void {
+    if (this.error) return;
+    try {
+      this.parser?.reset({ consume: true });
+    } catch (error) {
+      this.error = this.createProtocolError(
+        error instanceof Error ? error.message : 'Invalid SSE stream ending',
+      );
+    }
+  }
+
+  getError(): ServiceError | null {
+    return this.error;
+  }
+
+  isComplete(): boolean {
+    return this.complete;
+  }
+
+  getProviderError(): ServiceError | null {
+    return this.providerError;
+  }
+
+  getText(): string {
+    return this.targetText;
+  }
+
+  private createProtocolError(addition: string): ServiceError {
+    return {
+      type: 'api',
+      message: '流式响应格式无效',
+      addition,
+      troubleshootingLink: this.config.troubleshootingLink,
+    };
+  }
+
+  private handleParseError(error: ParseError): void {
+    if (error.type === 'max-buffer-size-exceeded') {
+      this.error = this.createProtocolError(error.message);
+      return;
+    }
+    const line = error.line;
+    if (error.type !== 'unknown-field' || !line?.trimStart().startsWith('{')) {
       return;
     }
 
     try {
-      const data = JSON.parse(event.data) as Record<string, unknown>;
+      const parsed = JSON.parse(line) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        return;
+      const providerError = this.config.extractError(
+        parsed as Record<string, unknown>,
+        this.config.troubleshootingLink,
+      );
+      if (providerError) {
+        this.providerError = providerError;
+        this.error = providerError;
+      }
+    } catch {
+      return;
+    }
+  }
 
-      // Check for errors first
-      const error = this.config.extractError(
+  private handleEvent(event: EventSourceMessage): void {
+    if (!event.data || event.data === '[DONE]') return;
+
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(event.data) as Record<string, unknown>;
+    } catch {
+      this.error = this.createProtocolError('SSE event data is not valid JSON');
+      return;
+    }
+
+    try {
+      const providerError = this.config.extractError(
         data,
         this.config.troubleshootingLink,
       );
-      if (error) {
-        this.state.error = error;
+      if (providerError) {
+        this.providerError = providerError;
+        this.error = providerError;
         return;
       }
-
-      // Extract delta text
-      const delta = this.config.extractDelta(data, event);
-      if (delta && this.state.query) {
-        this.state.targetText += delta;
-        this.state.query.onStream({
-          result: {
-            from: this.state.query.detectFrom,
-            to: this.state.query.detectTo,
-            toParagraphs: [this.state.targetText],
-          },
-        });
+      if (this.config.isComplete(data, event)) {
+        this.complete = true;
       }
-    } catch {
-      // Ignore parsing errors for non-JSON events
+
+      const delta = this.config.extractDelta(data, event);
+      if (!delta || !this.query) return;
+
+      this.targetText += delta;
+      this.query.onStream({
+        result: {
+          from: this.query.detectFrom,
+          to: this.query.detectTo,
+          toParagraphs: [this.targetText],
+        },
+      });
+    } catch (error) {
+      this.error = this.createProtocolError(
+        error instanceof Error ? error.message : 'Unable to parse SSE event',
+      );
     }
   }
 }

@@ -1,94 +1,34 @@
-<h4 align="right">
-  <strong>简体中文</strong> | <a href="https://github.com/nextai-translator/bob-plugin-openai-translator/blob/main/docs/README_EN.md">English</a>
-</h4>
+<p align="right">
+  <strong>简体中文</strong> · <a href="./docs/README_EN.md">English</a>
+</p>
 
-<div>
-  <h1 align="center">OpenAI Translator Bob Plugin</h1>
-  <p align="center">
-    <a href="https://github.com/nextai-translator/bob-plugin-openai-translator/releases" target="_blank">
-        <img alt="release" src="https://github.com/nextai-translator/bob-plugin-openai-translator/actions/workflows/release.yaml/badge.svg">
-    </a>
-    <a href="https://github.com/nextai-translator/bob-plugin-openai-translator/releases">
-        <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/nextai-translator/bob-plugin-openai-translator?style=flat">
-    </a>
-    <a href="https://github.com/nextai-translator/bob-plugin-openai-translator/releases">
-        <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/nextai-translator/bob-plugin-openai-translator/total">
-    </a>
-    <a href="https://github.com/nextai-translator/bob-plugin-openai-translator/releases">
-        <img alt="language" src="https://img.shields.io/badge/language-TypeScript-brightgreen?style=flat&color=blue">
-    </a>
-  </p>
-</div>
+# OpenAI Translator for Bob
 
-> **Note**
->
-> 重要更新：非 macOS 用户可以使用我开发的基于 OpenAI API 的划词翻译浏览器插件 [openai-translator](https://github.com/yetone/openai-translator) 以解燃眉之急。
+使用 OpenAI、Google Gemini、MiniMax 或 OpenAI 兼容 API 进行翻译、润色和语法修正的 [Bob](https://bobtranslate.com/) 插件。
 
-## 简介
+默认配置使用 OpenAI。安装后填写 API Key 即可开始翻译，其他选项按需修改。
 
-ChatGPT 向我们展示了 GPT 模型的伟大之处，所以我使用 OpenAI 的 API 实现了这个 Bob 的翻译 + 润色 + 语法修改插件，效果拔群！
+## 安装与使用
 
-<details>
+1. 安装 [Bob](https://bobtranslate.com/guide/) 1.8.0 或更高版本。
+2. 下载并打开最新的 [openai-translator.bobplugin](https://github.com/nextai-translator/bob-plugin-openai-translator/releases/latest)。
+3. 打开 Bob 的服务配置，找到 OpenAI Translator，填写 API Key。
+4. 保存配置后即可翻译。
 
-<summary>演示 👀</summary>
+## 配置
 
-![演示](https://user-images.githubusercontent.com/1206493/221086195-f1ed941d-4dfa-4aa0-9d47-56c258a8f854.gif)
+使用 Gemini 或 MiniMax 时，在[模型](./docs/configuration_manual_CN.md#模型)中选择对应选项；使用第三方 API 服务时，按其文档填写[模型](./docs/configuration_manual_CN.md#模型)和完整 [API URL](./docs/configuration_manual_CN.md#api-url)。
 
-</details>
+[推理](./docs/configuration_manual_CN.md#推理)、[系统指令和用户指令](./docs/configuration_manual_CN.md#系统指令和用户指令)等设置见配置手册。
 
+## 功能
 
-### 润色功能
+- 翻译 Bob 支持的语言。
+- 源语言与目标语言相同时，自动进行润色和语法修正。
+- 默认启用流式输出，并支持取消请求。
+- 默认使用模型自身的推理设置，也可降至模型支持的最低档位。
+- 系统指令可改变用途，用户指令可调整每次请求的术语、语气或格式。
 
-此插件已支持使用 OpenAI API 对句子进行润色和语法修改，只需要把目标语言设置为与源语言一样即可，全面替代 Grammarly！而且理论上任何语言都可以润色，不仅仅是英语。
+## 开发与贡献
 
-如果你不喜欢将翻译功能和文本润色功能放在一起，这里单独拆分出了一个专门用来文本润色和语法纠错的插件: [bob-plugin-openai-polisher](https://github.com/openai-translator/bob-plugin-openai-polisher)，这个润色插件具有更高级的润色功能，比如解释修改原因等。
-
-## 使用方法
-
-1. 安装 [Bob](https://bobtranslate.com/guide/#%E5%AE%89%E8%A3%85) (版本 >= 0.50)，一款 macOS 平台的翻译和 OCR 软件
-
-2. 下载此插件: [openai-translator.bobplugin](https://github.com/nextai-translator/bob-plugin-openai-translator/releases/latest)
-
-3. <details>
-
-    <summary>安装此插件 👀</summary>
-
-    ![安装步骤](https://user-images.githubusercontent.com/1206493/219937302-6be8d362-1520-4906-b8d6-284d01012837.gif)
-
-   </details>
-
-4. 去 [OpenAI](https://platform.openai.com/account/api-keys) 获取你的 API KEY
-
-5. 把 API KEY 填入 Bob 偏好设置 > 服务 > 此插件配置界面的 API KEY 的输入框中
-    - 如果你想了解关于其他设置的更多信息，请查看[配置手册](./docs/configuration_manual_CN.md)
-
-        <details>
-
-        <summary>演示 👀</summary>
-
-        ![设置步骤](https://user-images.githubusercontent.com/1206493/219937398-8e5bb8d2-7dc8-404a-96e7-a937e08c939f.gif)
-
-        </details>
-
-
-6. <details>
-
-   <summary>安装 PopClip 实现划词后鼠标附近出现悬浮图标 👀</summary>
-
-   [![PopClip](https://user-images.githubusercontent.com/1206493/219933584-d0c2b6cf-8fa0-40a6-858f-8f4bf05f38ef.gif)](https://bobtranslate.com/guide/integration/popclip.html)
-
-   </details>
-
-## 贡献
-
-如果你想要为 OpenAI Translator Bob Plugin 做出贡献，请阅读[贡献指南](.github/contributing.md)中的说明。我们可以先从这个[列表中的问题](https://github.com/nextai-translator/bob-plugin-openai-translator/contribute)开始。
-
-## 感谢
-
-我这只是个小小的 Bob 插件，强大的是 Bob 本身，向它的开发者 [ripperhe](https://github.com/ripperhe) 致敬！
-
-<!--
-<a href="https://api.gitsponsors.com/api/badge/link?p=CCTAcO52X68ppJ/My08020IxahBsfD6PUbrqKuOwPrq9S62VS6Ws2GohPnu+c7iLZCl1VMGgi9XUBFCbUqSf5Tu5kxKOygBDoLTUpUqbpET/qDO3asPc9qXuWMW4025U5MHsXaE0VScm35uM38/z0w==">
-  <img src="https://api.gitsponsors.com/api/badge/img?id=603668088" height="90">
-</a>
--->
+开发环境、验证命令和提交要求见[贡献指南](./.github/contributing.md)。运行时设计和外部文档依据见[架构说明](./docs/architecture.md)。

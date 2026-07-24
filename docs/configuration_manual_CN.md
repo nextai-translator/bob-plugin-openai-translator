@@ -1,193 +1,119 @@
-## 配置手册
+# 配置手册
 
-### 服务提供商
+填写 API Key 后即可使用默认的 OpenAI 配置，包括默认模型、官方 API、流式输出和模型默认推理设置。
 
-- 必选项
+## 最快开始
 
-- 默认值：OpenAI
+1. 在 Bob 的服务配置中找到 OpenAI Translator。
+2. 填写 OpenAI API Key。
+3. 保存配置并开始翻译。
 
-- 说明
+使用 Gemini 或 MiniMax 官方 API 时，选择对应模型。使用第三方 API 服务时，按其文档填写模型和完整 API URL。
 
-  - OpenAI：使用 OpenAI 官方服务
+## API Key
 
-  - OpenAI Compatible：使用与 OpenAI 兼容的服务，如 [Ollama](https://ollama.com/blog/openai-compatibility) 等；或是自定义/第三方反代服务，如 [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) 等
+多个 Key 可用英文逗号分隔，插件每次请求会随机选择一个。
 
-  - Azure OpenAI：使用 [Azure OpenAI Service](https://learn.microsoft.com/zh-cn/azure/ai-services/openai/chatgpt-quickstart)
+Key 只会发送到最终使用的 API URL。插件不会记录 Key 或请求头。
 
-  - Google Gemini：使用 [Google Gemini](https://ai.google.dev/gemini-api/docs) 服务
+## 模型
 
-  - MiniMax：使用 [MiniMax](https://platform.minimax.io/) 服务，可选模型见「模型」配置项
+默认模型为 `gpt-5.6-luna`。内置模型包括：
 
+- `gemini-3.5-flash-lite`
+- `gemini-3.6-flash`
+- `gpt-5.4-mini`
+- `gpt-5.6-luna`
+- `MiniMax-M2.7-highspeed`
+- `MiniMax-M3`
 
-### API Base URL
+API URL 留空时，插件按模型自动选择官方 API：
 
-- 可选项（OpenAI 和 Google Gemini）/ 必填项（Azure OpenAI 和 OpenAI Compatible）
+| 模型 | 使用的官方 API |
+| --- | --- |
+| `gemini-*` | Gemini GenerateContent API |
+| `gpt-*` 或其他模型 | OpenAI Responses API |
+| `MiniMax-*` | MiniMax Chat Completions API |
 
-- 默认值：无
+选择「自定义模型」后，填写 API 实际接受的模型 ID。OpenAI 兼容 API 可能使用带命名空间的模型 ID，例如 `openai/...`，应以服务文档为准。Azure OpenAI 使用部署名。
 
-- 说明
+## API URL
 
-  - OpenAI / OpenAI Compatible：可选，默认为：
+API URL 可留空。留空时使用模型对应的官方地址。
 
-    ```
-    https://api.openai.com
-    ```
+使用第三方 API 服务时填写完整请求 URL。当前支持 OpenAI 兼容 API 和 Azure OpenAI，地址必须以 `/responses` 或 `/chat/completions` 结尾。插件根据这个结尾选择请求格式。
 
-  - Azure OpenAI：必填，例如：
+常见示例：
 
-    ```
-    https://RESOURCE_NAME.openai.azure.com
-    ```
+- Azure OpenAI：`https://RESOURCE_NAME.openai.azure.com/openai/v1/responses`
+- Cloudflare AI Gateway：`https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1/chat/completions`
+- MiniMax 中国区：`https://api.minimaxi.com/v1/chat/completions`
+- OpenAI 兼容 API：`https://gateway.example.com/v1/responses`
+- OpenRouter：`https://openrouter.ai/api/v1/chat/completions`
+- Vercel AI Gateway：`https://ai-gateway.vercel.sh/v1/chat/completions`
 
-  - Google Gemini：可选，默认为：
+填写 API URL 后，普通地址使用 Bearer Token。`*.openai.azure.com` 地址以及包含 `/openai/v1` 或 `/openai/deployments/` 的 Azure 路径会自动使用 `api-key` 请求头。
 
-    ```
-    https://generativelanguage.googleapis.com/v1beta/models
-    ```
+## 流式输出
 
-  - MiniMax：可选，默认为：
+默认开启，译文会随模型生成逐步显示。关闭后会等待完整结果再显示。
 
-    ```
-    https://api.minimax.io
-    ```
+两种模式都会响应 Bob 的取消操作。流式响应格式错误、API 错误或空结果都会作为失败返回，不会产生空白的成功结果。
 
-    国内用户可使用：
+## 推理
 
-    ```
-    https://api.minimaxi.com
-    ```
+默认情况下，插件不发送推理控制参数，由模型决定。
 
-### API Path
+| 选项 | 行为 |
+| --- | --- |
+| 默认 | 不发送推理控制参数，使用模型默认设置 |
+| 关闭 | 支持关闭时禁用；无法完全关闭时使用最低档位 |
 
-- 可选项
+「关闭」只会向已确认支持该设置的模型发送参数。未知模型不会收到推理参数。第三方 API 对这些参数的支持程度不同；如果服务不支持，使用「默认」。
 
-- 默认值：`/v1/responses`
+## 系统指令和用户指令
 
-- 说明
+系统指令决定插件的用途和基本规则。要把默认翻译改成润色、改写或其他文本处理任务，应修改系统指令。
 
-  - 支持 OpenAI 的两种 API 格式：
+用户指令决定每次如何把原文交给模型。用途不变时，可在这里补充术语、语气、格式等本次请求规则。
 
-    - **Responses API**（默认）：`/v1/responses`
-    - **Chat Completions API**：`/v1/chat/completions`
+两个字段都有可直接编辑的默认值，并支持：
 
-  - OpenAI / OpenAI Compatible：
+- `$text`：原文
+- `$sourceLang`：源语言
+- `$targetLang`：目标语言
 
-    ```
-    /v1/responses
-    ```
-    或
-    ```
-    /v1/chat/completions
-    ```
+例如，系统指令保持翻译用途时，可以把用户指令改为：
 
-  - Azure OpenAI：需包含完整的部署路径和 API 版本，例如：
+```text
+保留技术术语的英文原文，并保持 Markdown 格式：
 
-    使用 Responses API：
-    ```
-    /openai/deployments/DEPLOYMENT_NAME/responses?api-version=preview
-    ```
+$text
+```
 
-    使用 Chat Completions API：
-    ```
-    /openai/deployments/DEPLOYMENT_NAME/chat/completions?api-version=2024-02-15-preview
-    ```
+同一变量出现多次时会全部替换。
 
-  - Google Gemini：不支持自定义 Path，留空即可
+## Temperature
 
-  - MiniMax：默认使用 `/v1/chat/completions`，留空即可
+插件不提供 Temperature 配置，也不会发送 `temperature`。不同模型对该参数的支持正在分化，省略它可以使用模型维护的有效默认值，并避免向固定采样参数的模型发送无效字段。
 
-### API KEY
+## 排错
 
-- 必填项
-
-- 默认值：无
-
-- 说明
-
-  - 可使用英文逗号分割多个账号下不同的 API KEY 以实现额度加倍及负载均衡
-
-### 模型
-
-- 必选项
-
-- 默认值：`gpt-5.6-luna`
-
-- 说明
-
-  - 选择 `custom` 时，需要设置 `自定义模型` 配置项
-
-### 自定义模型
-
-- 可选项
-
-- 默认值：无
-
-- 说明
-
-  - 联动项，当 `模型` 配置选择 `custom` 时，会读取此配置项设置的模型
-
-### 系统指令
-
-- 可选项
-
-- 默认值：`You are a translation engine that can only translate text and cannot interpret it.`
-
-- 说明
-
-  - 自定义 System Prompt，填写则会覆盖默认的 System Prompt
-
-  - 自定义 Prompt可使用以下变量：
-
-    1. `$text`：需要翻译的文本，即翻译窗口输入框内的文本
-
-    2. `$sourceLang`：原文语言，即翻译窗口输入框内文本的语言，比如「简体中文」
-
-    3. `$targetLang`：目标语言，即需要翻译成的语言，可以在翻译窗口中手动选择或自动检测，比如「English」
-
-### 用户指令
-
-- 可选项
-
-- 默认值：`translate from $sourceLang to $targetLang:\n\n$text`
-
-- 说明
-
-  - 自定义 User Prompt，填写则会覆盖默认的 User Prompt
-
-  - 可以使用与系统指令中相同的变量
-
-### 流式输出
-
-- 可选项
-
-- 默认值：`Enable`
-
-- 说明
-
-  - 启用后翻译结果会实时显示
-
-  - 禁用后会等待翻译完成后一次性显示
-
-### 深度思考
-
-- 可选项
-
-- 默认值：`Disable`
-
-- 说明
-
-  - 仅 GPT-5 系列和 Gemini 2.5/3 系列支持此设置，其他模型不受影响
-
-  - 由于 API 限制，GPT-5 系列无法完全禁用推理，Disable 仅将推理降至最低级别以减少延迟和 token 消耗
-
-### 温度
-
-- 可选项
-
-- 默认值：`0.2`
-
-- 说明
-
-  - 温度值越高，生成的文本越随机，更有创意
-
-  - 翻译任务建议设置在 `0.2` 左右，润色任务可以适当调高，如果需要严谨性，可以设置为 `0`
+- 只填 API Key 仍验证失败：确认它是有效的 OpenAI Key，并可访问默认模型。
+- 使用 Gemini 或 MiniMax 全球 API：选择对应模型，不要填写 API URL；MiniMax 中国区使用上面的中国区地址。
+- 使用 OpenAI 兼容 API：确认模型 ID 与服务文档一致，并填写完整 API URL。
+- `API URL 格式不正确`：检查地址是否以 `/responses` 或 `/chat/completions` 结尾。
+- Azure OpenAI：自定义模型填写部署名，API URL 使用 `*.openai.azure.com` 的完整请求地址。
+- 翻译接口不支持推理参数：将「推理」改为「默认」。
+
+官方参考：
+
+- [Azure OpenAI Responses API](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses)
+- [Bob 插件文档](https://bobtranslate.com/plugin/)
+- [Cloudflare AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
+- [Gemini API](https://ai.google.dev/gemini-api/docs)
+- [MiniMax OpenAI-compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)
+- [MiniMax 中国区 OpenAI-compatible API](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)
+- [OpenAI API](https://developers.openai.com/api/docs)
+- [OpenRouter Quickstart](https://openrouter.ai/docs/quickstart)
+- [Vercel AI Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions)

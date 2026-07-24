@@ -10,77 +10,193 @@ on:
         description: 'Tag message'
         required: true
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
 
     permissions:
       contents: write
-      packages: write
 
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Set up Git
         run: |
-          git config --global user.name 'GitHub Actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config user.name 'GitHub Actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
 
       - name: Determine tag version
-        id: determine_version
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [[ $VERSION != v* ]]; then
-            VERSION="v$VERSION"
+          if [[ "$GITHUB_REF_TYPE" != "branch" || "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+            echo "Run the release workflow from the default branch: $DEFAULT_BRANCH."
+            exit 1
           fi
-          VERSION_NUMBER="${VERSION#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_ENV
+          if [[ ! "$REQUESTED_VERSION" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Version must use semantic version format, for example 5.0.0 or v5.0.0."
+            exit 1
+          fi
+          git fetch origin "$DEFAULT_BRANCH"
+          git switch "$DEFAULT_BRANCH"
+          git merge --ff-only "origin/$DEFAULT_BRANCH"
 
-      - name: Update info.json
+          VERSION_NUMBER="${REQUESTED_VERSION#v}"
+          RELEASE_FLOOR="$(
+            {
+              jq -r '.version' package.json
+              jq -r '.versions[].version' appcast.json
+            } | sort -V | tail -n 1
+          )"
+          if ! printf '%s\n%s\n' "$RELEASE_FLOOR" "$VERSION_NUMBER" | sort -V -C; then
+            echo "Version $VERSION_NUMBER is older than the current release floor $RELEASE_FLOOR."
+            exit 1
+          fi
+          echo "VERSION=v$VERSION_NUMBER" >> "$GITHUB_ENV"
+          echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Select release source
+        id: release_source
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ env.VERSION }}
+          VERSION_NUMBER: ${{ env.VERSION_NUMBER }}
         run: |
-          OLD_VERSION=$(grep '"version":' public/info.json | awk -F\" '{print $4}')
-          sed -i "s/$OLD_VERSION/${{ env.VERSION_NUMBER }}/" public/info.json
+          if git rev-parse --verify --quiet "refs/tags/$VERSION"; then
+            git fetch origin "$DEFAULT_BRANCH"
+            TAG_COMMIT="$(git rev-list -n 1 "$VERSION")"
+            if ! git merge-base --is-ancestor "$TAG_COMMIT" "origin/$DEFAULT_BRANCH"; then
+              echo "Existing tag $VERSION does not belong to the current release history."
+              exit 1
+            fi
+            git switch --detach "$VERSION"
+            if [[ "$(jq -r '.version' package.json)" != "$VERSION_NUMBER" ]] ||
+              [[ "$(jq -r '.version' public/info.json)" != "$VERSION_NUMBER" ]]; then
+              echo "Existing tag $VERSION does not contain matching project metadata."
+              exit 1
+            fi
+            echo "existing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existing=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - uses: oven-sh/setup-bun@v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: latest
+          bun-version-file: package.json
 
-      - run: bun install
+      - run: bun ci
 
-      - name: Package plugin and update appcast
+      - name: Update versions and package plugin
         env:
           VERSION_NUMBER: ${{ env.VERSION_NUMBER }}
-          MESSAGE: ${{ github.event.inputs.message }}
-        run: |
-          bun run release "$VERSION_NUMBER" "$MESSAGE"
+        run: bun run release "$VERSION_NUMBER"
 
-      - name: Commit files
+      - name: Validate release state
         run: |
-          git commit -a -m 'chore: update appcast.json and info.json'
+          bun run lint
+          bun run test
 
-      - name: Create tag
+      - name: Commit and tag release
+        if: steps.release_source.outputs.existing == 'false'
         env:
-          VERSION: ${{ env.VERSION }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           MESSAGE: ${{ github.event.inputs.message }}
+          VERSION: ${{ env.VERSION }}
         run: |
+          git add package.json public/info.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: release ${VERSION}"
+          fi
           git tag -a "$VERSION" -m "$MESSAGE"
+          git push origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/$VERSION" --atomic
 
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ github.token }}
-          tags: true
+      - name: Inspect existing release
+        id: release_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ env.VERSION }}
+        run: |
+          if ! RELEASES="$(gh release list --limit 1000 --json isDraft,tagName)"; then
+            exit 1
+          fi
+          STATE="$(
+            jq -r --arg version "$VERSION" '
+              map(select(.tagName == $version))
+              | if length == 0 then "missing"
+                elif any(.[]; .isDraft == false) then "published"
+                else "draft"
+                end
+            ' <<< "$RELEASES"
+          )"
+          echo "state=$STATE" >> "$GITHUB_OUTPUT"
+          if [[ "$STATE" == "draft" ]]; then
+            echo "overwrite=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "overwrite=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@2.11.5
+      - name: Publish release
+        if: steps.release_state.outputs.state != 'published'
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          release_name: ${{ env.VERSION }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/openai-translator-${{ env.VERSION_NUMBER }}.bobplugin
-          asset_name: openai-translator-${{ env.VERSION_NUMBER }}.bobplugin
-          tag: ${{ env.VERSION }}
-          overwrite: true
           body: ${{ github.event.inputs.message }}
+          draft: true
+          fail_on_unmatched_files: true
+          files: dist/openai-translator-${{ env.VERSION_NUMBER }}.bobplugin
+          name: ${{ env.VERSION }}
+          overwrite_files: ${{ steps.release_state.outputs.overwrite }}
+          tag_name: ${{ env.VERSION }}
+
+      - name: Verify and publish release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_STATE: ${{ steps.release_state.outputs.state }}
+          VERSION: ${{ env.VERSION }}
+          VERSION_NUMBER: ${{ env.VERSION_NUMBER }}
+        run: |
+          PACKAGE_PATH="dist/openai-translator-$VERSION_NUMBER.bobplugin"
+          gh release download "$VERSION" --clobber --dir dist --pattern "openai-translator-$VERSION_NUMBER.bobplugin"
+          unzip -t "$PACKAGE_PATH"
+
+          if [[ "$RELEASE_STATE" != "published" ]]; then
+            git fetch origin "$DEFAULT_BRANCH"
+            RELEASE_FLOOR="$(
+              {
+                git show "origin/$DEFAULT_BRANCH:package.json" | jq -r '.version'
+                git show "origin/$DEFAULT_BRANCH:appcast.json" | jq -r '.versions[].version'
+              } | sort -V | tail -n 1
+            )"
+            if ! printf '%s\n%s\n' "$RELEASE_FLOOR" "$VERSION_NUMBER" | sort -V -C; then
+              echo "Version $VERSION_NUMBER is older than the current release floor $RELEASE_FLOOR."
+              exit 1
+            fi
+            gh release edit "$VERSION" --draft=false --latest
+          fi
+
+      - name: Update Appcast
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          MESSAGE: ${{ github.event.inputs.message }}
+          VERSION_NUMBER: ${{ env.VERSION_NUMBER }}
+        run: |
+          git switch "$DEFAULT_BRANCH"
+          git fetch origin "$DEFAULT_BRANCH"
+          git merge --ff-only "origin/$DEFAULT_BRANCH"
+
+          bun scripts/package.mts appcast "$VERSION_NUMBER" "$MESSAGE"
+          git add appcast.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+
+          git commit -m "chore: update appcast for ${VERSION}"
+          git push origin "HEAD:refs/heads/$DEFAULT_BRANCH"

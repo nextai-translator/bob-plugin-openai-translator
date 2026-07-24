@@ -1,100 +1,95 @@
-/**
- * Model capabilities for OpenAI and Gemini models.
- * Based on Vercel AI SDK: https://github.com/vercel/ai/blob/fad04b2e4ad6f927daebb5e7e342f0a98d35c3cd/packages/openai/src/openai-language-model-capabilities.ts
- */
+import type { ReasoningMode, ServiceProvider } from '../types';
 
-interface ReasoningConfig {
-  prefix: string;
-  // Effort floor when Thinking Mode is off (a low-latency minimum, not the model's API default).
-  defaultEffort: string;
-  // Floor for this family's '-pro' variant, which rejects 'low'/'minimal'. Omitted when the
-  // family has no pro variant.
-  proEffort?: string;
+export const DEFAULT_MODEL = 'gpt-5.6-luna';
+
+export const MODEL_CATALOG = Object.freeze([
+  {
+    id: 'gemini-3.5-flash-lite',
+    provider: 'gemini',
+  },
+  {
+    id: 'gemini-3.6-flash',
+    provider: 'gemini',
+  },
+  {
+    id: 'gpt-5.4-mini',
+    provider: 'openai',
+  },
+  {
+    id: 'gpt-5.6-luna',
+    provider: 'openai',
+  },
+  {
+    id: 'MiniMax-M2.7-highspeed',
+    provider: 'minimax',
+  },
+  {
+    id: 'MiniMax-M3',
+    provider: 'minimax',
+  },
+] as const);
+
+export type OpenAiReasoningEffort = 'high' | 'low' | 'minimal' | 'none';
+
+export type GeminiThinkingConfig =
+  | { readonly thinkingBudget: number }
+  | { readonly thinkingLevel: 'low' | 'minimal' };
+
+export interface ModelControls {
+  readonly geminiThinking?: GeminiThinkingConfig;
+  readonly miniMaxThinking?: 'disabled';
+  readonly openAiReasoningEffort?: OpenAiReasoningEffort;
 }
 
-// Reasoning floors per GPT-5 family, applied when Thinking Mode is off. Matched by longest prefix
-// first, so bare 'gpt-5' stays last and never shadows the more specific rules.
-// - Dotted minor versions (GPT-5.1+): non-pro 'low', pro 'medium' (5.x-pro accepts
-//   medium/high/xhigh). One 'gpt-5.' rule covers every minor version and its pro variant.
-// - Original GPT-5 family ('gpt-5', 'gpt-5-mini', 'gpt-5-pro'): non-pro 'minimal',
-//   'gpt-5-pro' is high-only.
-// Refs: https://developers.openai.com/api/docs/guides/reasoning,
-//       https://developers.openai.com/api/docs/models/gpt-5-pro (high-only).
-const REASONING_CONFIGS: ReasoningConfig[] = [
-  { prefix: 'gpt-5.', defaultEffort: 'low', proEffort: 'medium' },
-  { prefix: 'gpt-5-', defaultEffort: 'minimal', proEffort: 'high' },
-  { prefix: 'gpt-5', defaultEffort: 'minimal' },
-];
-
-const findReasoningConfig = (model: string): ReasoningConfig | undefined => {
-  return REASONING_CONFIGS.find((config) => model.startsWith(config.prefix));
-};
-
-const isReasoningModel = (model: string): boolean => {
-  return findReasoningConfig(model) !== undefined;
-};
-
-// '-pro' matched on segment boundaries (a trailing '-pro', or '-pro-' before a dated snapshot
-// like 'gpt-5.5-pro-2026-01-15') so 'gpt-5-proto' is not misread as pro.
-const isProVariant = (model: string): boolean => {
-  return model.endsWith('-pro') || model.includes('-pro-');
-};
-
-export const getDefaultReasoningEffort = (
+export const getCatalogModelProvider = (
   model: string,
-): string | undefined => {
-  // findReasoningConfig is the allowlist gate: a third-party '...-pro' model has no GPT-5 family
-  // config, so it returns undefined here and never reaches the pro branch.
-  const config = findReasoningConfig(model);
-  if (!config) return undefined;
-  return isProVariant(model)
-    ? (config.proEffort ?? config.defaultEffort)
-    : config.defaultEffort;
-};
+): ServiceProvider | undefined =>
+  MODEL_CATALOG.find((entry) => entry.id === model)?.provider;
 
-// Reasoning effort levels ordered low to high, for picking the higher of two efforts.
-const EFFORT_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+const OPENAI_REASONING_FLOORS = new Map<string, OpenAiReasoningEffort>([
+  ['gpt-5', 'minimal'],
+  ['gpt-5-pro', 'high'],
+  ['gpt-5.3-codex', 'low'],
+  ['gpt-5.4-mini', 'none'],
+  ['gpt-5.6', 'none'],
+  ['gpt-5.6-luna', 'none'],
+  ['gpt-5.6-sol', 'none'],
+  ['gpt-5.6-terra', 'none'],
+]);
 
-// Effort to use when Thinking Mode is on: at least 'medium', but never below the model's floor,
-// since some models reject lower values (gpt-5-pro is high-only, so it stays 'high'). Non-reasoning
-// models have no floor and get 'medium', preserving the prior always-'medium' behavior.
-export const getThinkingReasoningEffort = (model: string): string => {
-  const floor = getDefaultReasoningEffort(model);
-  if (!floor) return 'medium';
-  return EFFORT_RANK.indexOf(floor) > EFFORT_RANK.indexOf('medium')
-    ? floor
-    : 'medium';
-};
+const GEMINI_THINKING_FLOORS = new Map<string, GeminiThinkingConfig>([
+  ['gemini-2.5-flash', { thinkingBudget: 0 }],
+  ['gemini-2.5-flash-lite', { thinkingBudget: 0 }],
+  ['gemini-2.5-pro', { thinkingBudget: 128 }],
+  ['gemini-3-flash-preview', { thinkingLevel: 'minimal' }],
+  ['gemini-3-pro-preview', { thinkingLevel: 'low' }],
+  ['gemini-3.1-pro-preview', { thinkingLevel: 'low' }],
+  ['gemini-3.5-flash', { thinkingLevel: 'minimal' }],
+  ['gemini-3.5-flash-lite', { thinkingLevel: 'minimal' }],
+  ['gemini-3.6-flash', { thinkingLevel: 'minimal' }],
+]);
 
-export const supportsTemperature = (
+export const resolveModelControls = (
+  provider: ServiceProvider,
   model: string,
-  reasoningEffort?: string,
-): boolean => {
-  if (!isReasoningModel(model)) return true;
-  // GPT-5.1+ support temperature only when reasoning effort is explicitly 'none'
-  // GPT-5 (original) never supports temperature
-  return reasoningEffort === 'none';
-};
-
-const geminiSupportsThinking = (model: string): boolean => {
-  return (
-    model.includes('thinking') ||
-    model.includes('gemini-2.5') ||
-    model.includes('gemini-3')
-  );
-};
-
-export const getGeminiMinimalThinkingConfig = (
-  model: string,
-): Record<string, unknown> | undefined => {
-  if (!geminiSupportsThinking(model)) {
-    return undefined;
+  mode: ReasoningMode,
+): ModelControls => {
+  if (
+    provider === 'openai' ||
+    provider === 'azure-openai' ||
+    provider === 'openai-compatible'
+  ) {
+    const effort =
+      mode === 'disable' ? OPENAI_REASONING_FLOORS.get(model) : undefined;
+    return effort ? { openAiReasoningEffort: effort } : {};
   }
-
-  // Gemini 3 series uses thinkingLevel, Gemini 2.5 series uses thinkingBudget
-  if (model.includes('gemini-3')) {
-    return { thinkingLevel: 'minimal' };
+  if (provider === 'gemini') {
+    const thinking =
+      mode === 'disable' ? GEMINI_THINKING_FLOORS.get(model) : undefined;
+    return thinking ? { geminiThinking: thinking } : {};
   }
-
-  return { thinkingBudget: 0 };
+  if (provider === 'minimax' && model === 'MiniMax-M3') {
+    return mode === 'disable' ? { miniMaxThinking: 'disabled' } : {};
+  }
+  return {};
 };

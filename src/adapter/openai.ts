@@ -5,127 +5,98 @@ import type {
   ValidationCompletion,
 } from '@bob-translate/types';
 import type { EventSourceMessage } from 'eventsource-parser';
-import type {
-  GeminiResponse,
-  OpenAiErrorResponse,
-  OpenAiResponse,
-  ServiceAdapterConfig,
-} from '../types';
-import { handleValidateError } from '../utils/error';
-import {
-  getDefaultReasoningEffort,
-  getThinkingReasoningEffort,
-  supportsTemperature,
-} from '../utils/model-capabilities';
-import { generatePrompts, replacePromptKeywords } from '../utils/prompt';
+import { resolveModelControls } from '../utils/model-capabilities';
+import { createPrompts } from '../utils/prompt';
 import { BaseAdapter } from './base';
 
 export class OpenAiAdapter extends BaseAdapter {
-  constructor(config?: ServiceAdapterConfig) {
-    super(
-      config || {
-        troubleshootingLink:
-          'https://bobtranslate.com/service/translate/openai.html',
-        baseUrl: $option.apiUrl || 'https://api.openai.com',
-      },
-    );
-  }
-
-  protected getApiPath(): string {
-    return $option.apiPath || '/v1/responses';
-  }
-
-  protected isChatCompletionsApi(): boolean {
-    return this.getApiPath().includes('/chat/completions');
-  }
-
   protected extractStreamDelta(
     data: Record<string, unknown>,
     event: EventSourceMessage,
   ): string | null {
-    // Chat Completions API format: choices[0].delta.content
-    if (this.isChatCompletionsApi()) {
+    if (this.config.protocol === 'openai-chat-completions') {
       return this.extractChatCompletionsDelta(data);
     }
-
-    // Responses API format
     if (
       event.event === 'response.output_text.delta' ||
       data.type === 'response.output_text.delta'
     ) {
       return typeof data.delta === 'string' ? data.delta : null;
     }
-    return this.extractDeltaFromData(data);
-  }
-
-  private extractChatCompletionsDelta(
-    data: Record<string, unknown>,
-  ): string | null {
-    const choices = data.choices as Array<{
-      delta?: { content?: string };
-    }>;
-    return choices?.[0]?.delta?.content ?? null;
+    return null;
   }
 
   protected extractStreamError(
     data: Record<string, unknown>,
     troubleshootingLink: string,
   ): ServiceError | null {
-    if (!data.error) return null;
+    if (this.config.protocol === 'openai-responses') {
+      const terminalError = this.extractResponsesTerminalError(
+        data,
+        troubleshootingLink,
+      );
+      if (terminalError) return terminalError;
+    }
+    if (!data.error || typeof data.error !== 'object') return null;
 
-    const error = data.error as Record<string, unknown>;
-    return {
-      type: 'api',
-      message: (error.message as string) || 'API request failed',
-      addition: error.param ? `Parameter: ${error.param}` : '',
+    return this.createApiError(
+      data.error as Record<string, unknown>,
+      'API request failed',
       troubleshootingLink,
-    };
+    );
+  }
+
+  protected override isStreamComplete(
+    data: Record<string, unknown>,
+    event: EventSourceMessage,
+  ): boolean {
+    if (this.config.protocol !== 'openai-responses') return false;
+    if (
+      event.event !== 'response.completed' &&
+      data.type !== 'response.completed'
+    ) {
+      return false;
+    }
+    const response =
+      data.response && typeof data.response === 'object'
+        ? (data.response as Record<string, unknown>)
+        : {};
+    return response.status === 'completed';
+  }
+
+  protected override requiresStreamCompletion(): boolean {
+    return this.config.protocol === 'openai-responses';
   }
 
   protected extractErrorFromResponse(
-    errorResponse: HttpResponse<unknown>,
+    response: HttpResponse<unknown>,
   ): ServiceError {
-    const data = errorResponse.data as
-      | OpenAiErrorResponse
-      | Record<string, unknown>;
-    const statusCode = errorResponse.response?.statusCode;
+    const statusCode = response.response.statusCode;
+    const data =
+      response.data && typeof response.data === 'object'
+        ? (response.data as Record<string, unknown>)
+        : {};
+    const error =
+      data.error && typeof data.error === 'object'
+        ? (data.error as Record<string, unknown>)
+        : data;
+    const message =
+      typeof data.error === 'string'
+        ? data.error
+        : typeof error.message === 'string'
+          ? error.message
+          : `HTTP ${statusCode}`;
 
-    const baseError: ServiceError = {
-      type: statusCode === 401 ? 'secretKey' : 'api',
-      message: 'API request failed',
+    return {
+      type:
+        statusCode === 401 ||
+        statusCode === 403 ||
+        this.isAuthenticationError(error)
+          ? 'secretKey'
+          : 'api',
+      message,
       addition: JSON.stringify(data),
-      troubleshootingLink: this.config.troubleshootingLink,
     };
-
-    // Case 1: error is string
-    if (typeof data?.error === 'string') {
-      return {
-        ...baseError,
-        message: data.error,
-      };
-    }
-
-    // Case 2: error is object with message
-    if (
-      typeof data === 'object' &&
-      'error' in data &&
-      data.error &&
-      typeof data.error === 'object' &&
-      'message' in data.error
-    ) {
-      const errorObj = data.error as { message: string; param?: string };
-      let errorMessage = errorObj.message;
-      if (errorObj.param) {
-        errorMessage = `${errorMessage} (parameter: ${errorObj.param})`;
-      }
-      return {
-        ...baseError,
-        message: errorMessage,
-      };
-    }
-
-    // Case 3: Generic error
-    return baseError;
   }
 
   public buildHeaders(apiKey: string): Record<string, string> {
@@ -136,221 +107,232 @@ export class OpenAiAdapter extends BaseAdapter {
   }
 
   public buildRequestBody(query: TextTranslateQuery): Record<string, unknown> {
-    const { customSystemPrompt, customUserPrompt } = $option;
-    const { generatedSystemPrompt, generatedUserPrompt } =
-      generatePrompts(query);
+    const prompts = createPrompts(query, this.config);
+    const controls = resolveModelControls(
+      this.config.provider,
+      this.config.model,
+      this.config.reasoningMode,
+    );
 
-    let systemPrompt =
-      replacePromptKeywords(customSystemPrompt, query) || generatedSystemPrompt;
-    const userPrompt =
-      replacePromptKeywords(customUserPrompt, query) || generatedUserPrompt;
-
-    const formattingInstructions =
-      '\n\nIMPORTANT: Output the translation directly without any quotation marks or special characters wrapping. Do not add quotes like 『』「」"" around the result.';
-    systemPrompt += formattingInstructions;
-
-    const model = this.getModel();
-
-    // Use Chat Completions API format if path contains /chat/completions
-    if (this.isChatCompletionsApi()) {
-      return this.buildChatCompletionsRequestBody(
-        model,
-        systemPrompt,
-        userPrompt,
-      );
-    }
-
-    // Responses API format (default)
-    return this.buildResponsesApiRequestBody(model, systemPrompt, userPrompt);
-  }
-
-  private buildChatCompletionsRequestBody(
-    model: string,
-    systemPrompt: string,
-    userPrompt: string,
-  ): Record<string, unknown> {
-    const body: Record<string, unknown> = {
-      model,
-      stream: this.isStreamEnabled(),
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: this.getTemperature(),
-    };
-
-    return body;
-  }
-
-  private buildResponsesApiRequestBody(
-    model: string,
-    systemPrompt: string,
-    userPrompt: string,
-  ): Record<string, unknown> {
-    const body: Record<string, unknown> = {
-      model,
-      stream: this.isStreamEnabled(),
-      instructions: systemPrompt,
-      input: userPrompt,
-    };
-
-    const reasoningEffort = this.isThinkingModeEnabled()
-      ? getThinkingReasoningEffort(model)
-      : getDefaultReasoningEffort(model);
-
-    if (reasoningEffort) {
-      body.reasoning = { effort: reasoningEffort };
-    }
-
-    if (supportsTemperature(model, reasoningEffort)) {
-      body.temperature = this.getTemperature();
-    }
-
-    return body;
-  }
-
-  public parseResponse(
-    response: HttpResponse<GeminiResponse | OpenAiResponse>,
-  ): string {
-    const { data } = response;
-
-    // Handle Chat Completions API format: choices[0].message.content
-    if (this.isChatCompletionsApi()) {
-      return this.parseChatCompletionsResponse(data);
-    }
-
-    // Handle Responses API format
-    if (typeof data === 'object' && 'output' in data) {
-      const openAiResponse = data as OpenAiResponse;
-      // Use the helper field if available
-      if (openAiResponse.output_text) {
-        return openAiResponse.output_text.trim();
+    if (this.config.protocol === 'openai-chat-completions') {
+      const body: Record<string, unknown> = {
+        model: this.config.model,
+        stream: this.config.stream,
+        messages: [
+          { role: 'system', content: prompts.system },
+          { role: 'user', content: prompts.user },
+        ],
+      };
+      if (controls.openAiReasoningEffort) {
+        body.reasoning_effort = controls.openAiReasoningEffort;
       }
-      // Otherwise extract from output array
-      if (openAiResponse.output && openAiResponse.output.length > 0) {
-        // Look for message type items in the output array
-        for (const item of openAiResponse.output) {
-          if (
-            item.type === 'message' &&
-            item.content &&
-            item.content.length > 0
-          ) {
-            const text = item.content
-              .filter((c) => c.type === 'output_text')
-              .map((c) => c.text)
-              .join('');
-            if (text) {
-              return text.trim();
-            }
-          }
-        }
-      }
-      throw new Error('No output returned from Responses API');
+      return body;
     }
 
-    throw new Error('Unsupported response type');
-  }
-
-  private parseChatCompletionsResponse(data: unknown): string {
-    const response = data as {
-      choices?: Array<{
-        message?: { content?: string };
-      }>;
+    const body: Record<string, unknown> = {
+      model: this.config.model,
+      stream: this.config.stream,
+      instructions: prompts.system,
+      input: prompts.user,
     };
-    const content = response?.choices?.[0]?.message?.content;
-    if (content) {
-      return content.trim();
+    if (controls.openAiReasoningEffort) {
+      body.reasoning = { effort: controls.openAiReasoningEffort };
     }
-    throw new Error('No content returned from Chat Completions API');
+    return body;
   }
 
   public getTextGenerationUrl(): string {
-    return `${this.config.baseUrl}${this.getApiPath()}`;
+    return this.config.endpoint;
   }
 
-  protected getValidationUrl(): string {
-    return `${this.config.baseUrl}/v1/models`;
-  }
-
-  private extractDeltaFromData(
-    dataObj: Record<string, unknown>,
-  ): string | null {
-    // Handle new Responses API event stream format
-    if (
-      dataObj.type === 'response.output_text.delta' &&
-      typeof dataObj.delta === 'string'
-    ) {
-      return dataObj.delta;
+  public parseResponse(response: HttpResponse<unknown>): string {
+    if (this.config.protocol === 'openai-chat-completions') {
+      const data = response.data as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content === 'string' && content) return content.trim();
+      throw new Error('Chat Completions API returned no text');
     }
 
-    // Handle old Responses API stream format (if still used)
-    if (
-      dataObj.object === 'response.chunk' &&
-      dataObj.delta &&
-      typeof dataObj.delta === 'object'
-    ) {
-      const delta = dataObj.delta as Record<string, unknown>;
-      if (Array.isArray(delta.output)) {
-        const output = delta.output;
-        if (output.length > 0 && output[0] && typeof output[0] === 'object') {
-          const firstOutput = output[0] as Record<string, unknown>;
-          if (Array.isArray(firstOutput.content)) {
-            return (
-              firstOutput.content
-                .filter(
-                  (
-                    content: unknown,
-                  ): content is { type?: string; text?: string } =>
-                    typeof content === 'object' &&
-                    content !== null &&
-                    'type' in content &&
-                    content.type === 'output_text' &&
-                    'text' in content &&
-                    typeof content.text === 'string',
-                )
-                .map((content) => content.text)
-                .join('') || null
-            );
-          }
-        }
+    const rawData = response.data as Record<string, unknown>;
+    const terminalError = this.extractResponsesTerminalError(rawData);
+    if (terminalError) throw terminalError;
+
+    const data = rawData as {
+      output?: Array<{
+        type?: string;
+        content?: Array<{ type?: string; text?: string }>;
+      }>;
+      output_text?: string;
+    };
+    if (typeof data.output_text === 'string' && data.output_text) {
+      return data.output_text.trim();
+    }
+
+    let text = '';
+    for (const item of data.output || []) {
+      if (item.type !== 'message') continue;
+      for (const content of item.content || []) {
+        if (content.type === 'output_text') text += content.text || '';
       }
     }
-
-    return null;
+    if (text) return text.trim();
+    throw new Error('Responses API returned no text');
   }
 
-  public async testApiConnection(
+  public testApiConnection(
     apiKey: string,
-    _apiUrl: string,
     completion: ValidationCompletion,
   ): Promise<void> {
-    const header = this.buildHeaders(apiKey);
-    const validationUrl = this.getValidationUrl();
+    if (this.config.provider === 'openai-compatible') {
+      return this.testGenerationConnection(apiKey, completion);
+    }
 
-    try {
-      const response = await $http.request({
+    const validationUrl = this.config.endpoint.replace(
+      /\/(?:responses|chat\/completions)(?:\?.*)?$/,
+      '/models',
+    );
+
+    return this.validateConnection(
+      {
         method: 'GET',
         url: validationUrl,
-        header,
-      });
+        header: this.buildHeaders(apiKey),
+      },
+      completion,
+      (response) => {
+        const data = response.data as {
+          data?: unknown[];
+          object?: string;
+        };
+        if (Array.isArray(data.data) || data.object === 'list') return;
+        throw {
+          type: 'api',
+          message: 'Models API returned an unexpected response',
+        } satisfies ServiceError;
+      },
+    );
+  }
 
-      const responseData = response.data;
-      if (responseData?.error) {
-        return handleValidateError(
-          completion,
-          this.extractErrorFromResponse(response),
-        );
-      }
+  protected testGenerationConnection(
+    apiKey: string,
+    completion: ValidationCompletion,
+  ): Promise<void> {
+    const body =
+      this.config.protocol === 'openai-chat-completions'
+        ? {
+            model: this.config.model,
+            messages: [{ role: 'user', content: 'Reply with OK.' }],
+            stream: false,
+          }
+        : {
+            model: this.config.model,
+            input: 'Reply with OK.',
+            stream: false,
+          };
 
-      // Check if we got a valid models list response
-      if (
-        responseData &&
-        (responseData.data || responseData.object === 'list')
-      ) {
-        return completion({ result: true });
+    return this.validateConnection(
+      {
+        method: 'POST',
+        url: this.config.endpoint,
+        header: this.buildHeaders(apiKey),
+        body,
+      },
+      completion,
+      (response) => {
+        this.parseResponse(response);
+      },
+    );
+  }
+
+  private extractChatCompletionsDelta(
+    data: Record<string, unknown>,
+  ): string | null {
+    const choices = data.choices as
+      | Array<{ delta?: { content?: string } }>
+      | undefined;
+    return choices?.[0]?.delta?.content ?? null;
+  }
+
+  private createApiError(
+    error: Record<string, unknown>,
+    fallbackMessage: string,
+    troubleshootingLink?: string,
+  ): ServiceError {
+    const details: string[] = [];
+    for (const field of ['code', 'type', 'param']) {
+      if (typeof error[field] === 'string' && error[field]) {
+        details.push(`${field}: ${error[field]}`);
       }
-    } catch (error) {
-      handleValidateError(completion, error);
     }
+    return {
+      type: this.isAuthenticationError(error) ? 'secretKey' : 'api',
+      message:
+        typeof error.message === 'string' && error.message
+          ? error.message
+          : fallbackMessage,
+      ...(details.length > 0 ? { addition: details.join(', ') } : {}),
+      ...(troubleshootingLink ? { troubleshootingLink } : {}),
+    };
+  }
+
+  private extractResponsesTerminalError(
+    data: Record<string, unknown>,
+    troubleshootingLink?: string,
+  ): ServiceError | null {
+    if (data.type === 'error') {
+      return this.createApiError(
+        data,
+        'Responses API request failed',
+        troubleshootingLink,
+      );
+    }
+
+    const response =
+      data.response && typeof data.response === 'object'
+        ? (data.response as Record<string, unknown>)
+        : data;
+    const failed =
+      data.type === 'response.failed' || response.status === 'failed';
+    if (failed) {
+      const error =
+        response.error && typeof response.error === 'object'
+          ? (response.error as Record<string, unknown>)
+          : {};
+      return this.createApiError(
+        error,
+        'Responses API request failed',
+        troubleshootingLink,
+      );
+    }
+
+    const incomplete =
+      data.type === 'response.incomplete' || response.status === 'incomplete';
+    if (!incomplete) return null;
+
+    const details =
+      response.incomplete_details &&
+      typeof response.incomplete_details === 'object'
+        ? (response.incomplete_details as Record<string, unknown>)
+        : {};
+    const reason =
+      typeof details.reason === 'string' ? details.reason : undefined;
+    return {
+      type: 'api',
+      message: reason ? `API 响应未完成：${reason}` : 'API 响应未完成',
+      ...(reason ? { addition: `Reason: ${reason}` } : {}),
+      ...(troubleshootingLink ? { troubleshootingLink } : {}),
+    };
+  }
+
+  private isAuthenticationError(error: Record<string, unknown>): boolean {
+    const code = typeof error.code === 'string' ? error.code : '';
+    const type = typeof error.type === 'string' ? error.type : '';
+    return (
+      code.includes('api_key') ||
+      type.includes('authentication') ||
+      type.includes('permission')
+    );
   }
 }
