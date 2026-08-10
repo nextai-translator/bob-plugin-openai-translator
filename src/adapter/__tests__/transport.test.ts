@@ -351,6 +351,27 @@ describe('shared transport', () => {
     });
   });
 
+  it('collects a streaming HTTP error body across chunks', async () => {
+    const { onCompletion, query } = createQuery();
+    streamHandler = (config) => {
+      config.streamHandler?.({
+        text: ' {"error":{"message":"bad ',
+        rawData: {} as never,
+      });
+      config.streamHandler?.({
+        text: 'key","type":"authentication_error"}}',
+        rawData: {} as never,
+      });
+      config.handler?.(streamCompletionResponse(401));
+    };
+
+    await createAdapter(true).translate(query, 'key');
+
+    expect(onCompletion.mock.calls[0][0]).toMatchObject({
+      error: { type: 'secretKey', message: 'bad key' },
+    });
+  });
+
   it('preserves Bob streaming network messages', async () => {
     const { onCompletion, query } = createQuery();
     streamHandler = (config) => {

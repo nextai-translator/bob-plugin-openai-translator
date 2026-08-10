@@ -79,6 +79,9 @@ describe('info.json consistency', () => {
         expect(typeof option.textConfig.height).toBe('number');
       }
     }
+    expect(getOption('apiKeys').textConfig?.height).toBe(
+      getOption('apiUrl').textConfig?.height,
+    );
   });
 
   it('keeps the configuration UI Chinese-first', () => {

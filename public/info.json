@@ -12,7 +12,7 @@
       "desc": "多个 Key 可用英文逗号分隔",
       "identifier": "apiKeys",
       "textConfig": {
-        "height": 40,
+        "height": 56,
         "placeholderText": "填写 API Key",
         "type": "secure"
       },

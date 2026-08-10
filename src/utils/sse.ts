@@ -36,6 +36,9 @@ export class SseStreamHandler {
   private parser: EventSourceParser | null = null;
   private providerError: ServiceError | null = null;
   private query: TextTranslateQuery | null = null;
+  private rawJsonChunks: string[] | null = [];
+  private rawJsonLength = 0;
+  private rawJsonStarted = false;
   private targetText = '';
 
   constructor(private readonly config: SseStreamHandlerConfig) {}
@@ -45,6 +48,9 @@ export class SseStreamHandler {
     this.error = null;
     this.providerError = null;
     this.query = query;
+    this.rawJsonChunks = [];
+    this.rawJsonLength = 0;
+    this.rawJsonStarted = false;
     this.targetText = '';
     this.parser = createParser({
       maxBufferSize: MAX_SSE_BUFFER_SIZE,
@@ -55,6 +61,7 @@ export class SseStreamHandler {
 
   feed(text: string): void {
     if (this.error) return;
+    this.captureRawJson(text);
     try {
       this.parser?.feed(text);
     } catch (error) {
@@ -73,6 +80,7 @@ export class SseStreamHandler {
         error instanceof Error ? error.message : 'Invalid SSE stream ending',
       );
     }
+    this.handleRawJsonError();
   }
 
   getError(): ServiceError | null {
@@ -100,18 +108,37 @@ export class SseStreamHandler {
     };
   }
 
-  private handleParseError(error: ParseError): void {
-    if (error.type === 'max-buffer-size-exceeded') {
-      this.error = this.createProtocolError(error.message);
-      return;
-    }
-    const line = error.line;
-    if (error.type !== 'unknown-field' || !line?.trimStart().startsWith('{')) {
-      return;
-    }
+  // Bob can deliver a plain JSON error body through streamHandler while omitting it from handler.
+  private captureRawJson(text: string): void {
+    if (!this.rawJsonChunks) return;
 
+    this.rawJsonChunks.push(text);
+    this.rawJsonLength += text.length;
+    if (this.rawJsonLength > MAX_SSE_BUFFER_SIZE) {
+      this.rawJsonChunks = null;
+      return;
+    }
+    if (this.rawJsonStarted) return;
+
+    const contentIndex = text.search(/\S/);
+    if (contentIndex === -1) return;
+    if (text[contentIndex] === '{') {
+      this.rawJsonStarted = true;
+      return;
+    }
+    this.rawJsonChunks = null;
+  }
+
+  private handleRawJsonError(): void {
+    if (this.providerError || !this.rawJsonStarted || !this.rawJsonChunks)
+      return;
+
+    this.handleJsonError(this.rawJsonChunks.join(''));
+  }
+
+  private handleJsonError(text: string): void {
     try {
-      const parsed = JSON.parse(line) as unknown;
+      const parsed = JSON.parse(text) as unknown;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
         return;
       const providerError = this.config.extractError(
@@ -125,6 +152,18 @@ export class SseStreamHandler {
     } catch {
       return;
     }
+  }
+
+  private handleParseError(error: ParseError): void {
+    if (error.type === 'max-buffer-size-exceeded') {
+      this.error = this.createProtocolError(error.message);
+      return;
+    }
+    const line = error.line;
+    if (error.type !== 'unknown-field' || !line?.trimStart().startsWith('{')) {
+      return;
+    }
+    this.handleJsonError(line);
   }
 
   private handleEvent(event: EventSourceMessage): void {
