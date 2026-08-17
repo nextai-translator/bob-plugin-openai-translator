@@ -183,6 +183,7 @@ The linked [Bob 1.8 plugin changes](https://bobtranslate.com/blog/2023-05-18-180
 - [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning)
 - [OpenAI Responses migration](https://developers.openai.com/api/docs/guides/migrate-to-responses)
 - [OpenRouter Quickstart](https://openrouter.ai/docs/quickstart)
+- [OrcaRouter](https://www.orcarouter.ai)
 - [Vercel AI Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions)
 
 ## Rejected complexity
