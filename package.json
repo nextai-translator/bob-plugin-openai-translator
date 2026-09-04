@@ -30,7 +30,7 @@
     "typescript": "7.0.2"
   },
   "engines": {
-    "bun": "1.4.0"
+    "bun": "1.4.1"
   },
   "dependencies": {
     "eventsource-parser": "4.1.0"
