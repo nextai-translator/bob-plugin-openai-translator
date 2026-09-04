@@ -26,7 +26,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@bob-translate/types": "1.1.0",
-    "@types/bun": "1.4.0",
+    "@types/bun": "1.4.1",
     "typescript": "7.0.2"
   },
   "engines": {
