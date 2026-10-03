@@ -50,6 +50,7 @@ Common examples:
 - MiniMax China: `https://api.minimaxi.com/v1/chat/completions`
 - OpenAI-compatible API: `https://gateway.example.com/v1/responses`
 - OpenRouter: `https://openrouter.ai/api/v1/chat/completions`
+- OrcaRouter: `https://api.orcarouter.ai/v1/chat/completions`
 - Vercel AI Gateway: `https://ai-gateway.vercel.sh/v1/chat/completions`
 
 With an API URL, ordinary hosts use a Bearer token. A `*.openai.azure.com` host or an Azure path containing `/openai/v1` or `/openai/deployments/` automatically uses the `api-key` header.
