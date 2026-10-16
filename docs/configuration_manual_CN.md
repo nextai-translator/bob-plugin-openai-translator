@@ -50,6 +50,7 @@ API URL 可留空。留空时使用模型对应的官方地址。
 - MiniMax 中国区：`https://api.minimaxi.com/v1/chat/completions`
 - OpenAI 兼容 API：`https://gateway.example.com/v1/responses`
 - OpenRouter：`https://openrouter.ai/api/v1/chat/completions`
+- OrcaRouter：`https://api.orcarouter.ai/v1/chat/completions`
 - Vercel AI Gateway：`https://ai-gateway.vercel.sh/v1/chat/completions`
 
 填写 API URL 后，普通地址使用 Bearer Token。`*.openai.azure.com` 地址以及包含 `/openai/v1` 或 `/openai/deployments/` 的 Azure 路径会自动使用 `api-key` 请求头。
