@@ -72,7 +72,7 @@ For a URL ending in `/chat/completions` or `/responses`, an Azure host (`*.opena
 
 Streaming is enabled by default, so text appears as the model generates it. Disable it to wait for the complete result.
 
-Both modes respond to Bob's cancellation action. Invalid stream data, API errors, empty responses, and responses that stop before generation finishes are returned as failures rather than blank or partial successful results.
+Both modes respond to Bob's cancellation action. Invalid stream data, API errors, empty responses, and responses the service reports as cut off by a length limit or content filter are returned as failures.
 
 ## Output format
 
