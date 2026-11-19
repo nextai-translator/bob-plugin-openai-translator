@@ -2,6 +2,14 @@
   "identifier": "yetone.openai.translator",
   "versions": [
     {
+      "version": "5.1.0",
+      "desc": "支持 Claude 模型与 Anthropic Messages API，译文支持 Markdown 渲染，更新模型列表，修复 Gemini、MiniMax 与 Azure 请求处理",
+      "sha256": "b6cd4d5e65d9bbc11c88c0774a5c47da7a5718bb9ea4b7a279bd268ac0a6f04b",
+      "url": "https://github.com/nextai-translator/bob-plugin-openai-translator/releases/download/v5.1.0/openai-translator-5.1.0.bobplugin",
+      "minBobVersion": "1.8.0",
+      "timestamp": 1795109500817
+    },
+    {
       "version": "5.0.1",
       "desc": "Preserve streamed provider errors and align API field heights",
       "sha256": "e5f7afe1f24264bc7a86d0734c009d6091a7777b7b01b1238f3400bb1a17556f",
