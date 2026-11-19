@@ -1,4 +1,5 @@
 import type { PluginConfig, ServiceAdapter } from '../types';
+import { AnthropicAdapter } from './anthropic';
 import { AzureOpenAiAdapter } from './azure-openai';
 import { GeminiAdapter } from './gemini';
 import { MiniMaxAdapter } from './minimax';
@@ -6,6 +7,8 @@ import { OpenAiAdapter } from './openai';
 
 export const getServiceAdapter = (config: PluginConfig): ServiceAdapter => {
   switch (config.provider) {
+    case 'anthropic':
+      return new AnthropicAdapter(config);
     case 'azure-openai':
       return new AzureOpenAiAdapter(config);
     case 'gemini':

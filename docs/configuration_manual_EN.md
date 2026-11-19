@@ -8,7 +8,7 @@ Enter an API key to use the default OpenAI configuration: the default model, off
 2. Enter an OpenAI API key.
 3. Save the configuration and translate.
 
-For the official Gemini or MiniMax API, select the corresponding model. For a third-party API service, enter the model and full API URL specified by the service.
+For the official Claude, Gemini, or MiniMax API, select the corresponding model and enter that service's API key. For a third-party API service, enter the model and full API URL specified by the service.
 
 ## API key
 
@@ -18,19 +18,22 @@ A key is sent only to the resolved API URL. The plugin does not log keys or requ
 
 ## Model
 
-The default model is `gpt-5.6-luna`. Built-in models are:
+The default model is `gpt-6-luna`. Built-in models are:
 
+- `claude-haiku-5-5`
+- `claude-sonnet-5-5`
 - `gemini-3.5-flash-lite`
-- `gemini-3.6-flash`
-- `gpt-5.4-mini`
-- `gpt-5.6-luna`
-- `MiniMax-M2.7-highspeed`
+- `gemini-4-hydrogen`
+- `gpt-6-luna`
+- `gpt-6.1-terra`
 - `MiniMax-M3`
+- `MiniMax-M3.1-Flash`
 
 With an empty API URL, the model selects the official API:
 
 | Model | Official API |
 | --- | --- |
+| `claude-*` | Claude Messages API |
 | `gemini-*` | Gemini GenerateContent API |
 | `gpt-*` or any other model | OpenAI Responses API |
 | `MiniMax-*` | MiniMax Chat Completions API |
@@ -41,24 +44,39 @@ After selecting Custom model, enter the model ID accepted by the API. An OpenAI-
 
 The API URL may be empty. An empty value uses the official endpoint selected by the model.
 
-For a third-party API service, enter the full request URL. The plugin currently supports OpenAI-compatible APIs and Azure OpenAI, and the URL must end in `/responses` or `/chat/completions`. The suffix selects the request format.
+For a third-party API service, enter the full request URL. The URL ending selects the request format and the authentication header:
+
+| URL ending | Request format | Authentication header |
+| --- | --- | --- |
+| `/chat/completions` | OpenAI Chat Completions | `Authorization: Bearer` |
+| `/messages` | Claude Messages | `x-api-key` |
+| `/models` | Gemini GenerateContent | `x-goog-api-key` |
+| `/responses` | OpenAI Responses | `Authorization: Bearer` |
+
+For the Gemini format, end the URL at `/models`; the plugin appends the model and operation.
 
 Common examples:
 
 - Azure OpenAI: `https://RESOURCE_NAME.openai.azure.com/openai/v1/responses`
+- Claude-format gateway: `https://gateway.example.com/v1/messages`
 - Cloudflare AI Gateway: `https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1/chat/completions`
+- Gemini-format gateway: `https://gateway.example.com/v1beta/models`
 - MiniMax China: `https://api.minimaxi.com/v1/chat/completions`
 - OpenAI-compatible API: `https://gateway.example.com/v1/responses`
 - OpenRouter: `https://openrouter.ai/api/v1/chat/completions`
 - Vercel AI Gateway: `https://ai-gateway.vercel.sh/v1/chat/completions`
 
-With an API URL, ordinary hosts use a Bearer token. A `*.openai.azure.com` host or an Azure path containing `/openai/v1` or `/openai/deployments/` automatically uses the `api-key` header.
+For a URL ending in `/chat/completions` or `/responses`, an Azure host (`*.openai.azure.com`, `*.cognitiveservices.azure.com`, `*.services.ai.azure.com`) or a path containing `/openai/deployments/` uses the `api-key` header instead.
 
 ## Streaming
 
 Streaming is enabled by default, so text appears as the model generates it. Disable it to wait for the complete result.
 
-Both modes respond to Bob's cancellation action. Invalid stream data, API errors, and empty responses are returned as failures rather than blank successful results.
+Both modes respond to Bob's cancellation action. Invalid stream data, API errors, empty responses, and responses that stop before generation finishes are returned as failures rather than blank or partial successful results.
+
+## Output format
+
+The plugin returns the result to Bob as Markdown. Bob 1.21.0 and later on macOS 13 and later render headings, lists, code blocks, and other formatting, which can be turned off under Bob's Preferences > Translate > Markdown; earlier versions show plain text.
 
 ## Reasoning
 
@@ -100,9 +118,10 @@ The plugin has no Temperature setting and does not send `temperature`. Model sup
 ## Troubleshooting
 
 - Validation fails with only an API key: confirm that it is a valid OpenAI key with access to the default model.
-- Gemini or the global MiniMax API: select the corresponding model and leave the API URL empty; for MiniMax China, use the China API URL above.
+- Claude, Gemini, or the global MiniMax API: select the corresponding model and leave the API URL empty; for MiniMax China, use the China API URL above.
 - OpenAI-compatible API: use the model ID from its documentation and enter the full API URL.
-- `Invalid API URL`: ensure the address ends in `/responses` or `/chat/completions`.
+- `Invalid API URL`: ensure the address ends in one of the endings listed under [API URL](#api-url).
+- `API 响应未完成：max_tokens`, `length`, or `MAX_TOKENS`: the model's reasoning and result together exceeded the output limit for one request; retry with shorter text or with Reasoning disabled.
 - Azure OpenAI: enter the deployment name as the custom model and use the full `*.openai.azure.com` request URL.
 - The translation API rejects reasoning fields: set Reasoning to Default.
 
@@ -110,6 +129,7 @@ Official references:
 
 - [Azure OpenAI Responses API](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses)
 - [Bob plugin documentation](https://bobtranslate.com/plugin/)
+- [Claude API](https://platform.claude.com/docs/en/api/overview)
 - [Cloudflare AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
 - [Gemini API](https://ai.google.dev/gemini-api/docs)
 - [MiniMax China OpenAI-compatible API](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)

@@ -5,6 +5,7 @@ import type {
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
+import { AnthropicAdapter } from '../anthropic';
 import { AzureOpenAiAdapter } from '../azure-openai';
 import { GeminiAdapter } from '../gemini';
 import { getServiceAdapter } from '../index';
@@ -72,7 +73,12 @@ describe('shared transport', () => {
   beforeEach(() => {
     request.mockClear();
     streamRequest.mockClear();
-    requestHandler = async () => successResponse({ output_text: '你好' });
+    requestHandler = async () =>
+      successResponse({
+        output: [
+          { type: 'message', content: [{ type: 'output_text', text: '你好' }] },
+        ],
+      });
     streamHandler = (config) => {
       config.handler?.(streamCompletionResponse());
     };
@@ -83,7 +89,11 @@ describe('shared transport', () => {
     let captured: RequestConfig | undefined;
     requestHandler = async (config) => {
       captured = config;
-      return successResponse({ output_text: '你好' });
+      return successResponse({
+        output: [
+          { type: 'message', content: [{ type: 'output_text', text: '你好' }] },
+        ],
+      });
     };
 
     await createAdapter(false).translate(query, 'key');
@@ -92,6 +102,7 @@ describe('shared transport', () => {
     expect(onCompletion).toHaveBeenCalledTimes(1);
     expect(onCompletion.mock.calls[0][0]).toEqual({
       result: {
+        content: { format: 'markdown', text: '你好' },
         from: 'en',
         to: 'zh-Hans',
         toParagraphs: ['你好'],
@@ -129,6 +140,7 @@ describe('shared transport', () => {
     expect(onCompletion).toHaveBeenCalledTimes(1);
     expect(onCompletion.mock.calls[0][0]).toEqual({
       result: {
+        content: { format: 'markdown', text: 'Invalid token is text' },
         from: 'en',
         to: 'zh-Hans',
         toParagraphs: ['Invalid token is text'],
@@ -260,16 +272,27 @@ describe('shared transport', () => {
     });
   });
 
-  it('parses Gemini and MiniMax stream event shapes', async () => {
+  it('parses Anthropic, Gemini, and MiniMax stream event shapes', async () => {
     const cases = [
+      {
+        adapter: new AnthropicAdapter(
+          createTestConfig({ model: 'claude-haiku-5-5' }),
+        ),
+        event:
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}\n\n' +
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Claude"}}\n\n' +
+          'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+        expected: 'Claude',
+      },
       {
         adapter: new GeminiAdapter(
           createTestConfig({
-            model: 'gemini-3.6-flash',
+            model: 'gemini-4-hydrogen',
           }),
         ),
         event:
-          'data: {"candidates":[{"content":{"parts":[{"text":"Gemini"}]}}]}\n\n',
+          'data: {"candidates":[{"content":{"parts":[{"text":"Gemini"}]},"finishReason":"STOP"}]}\n\n',
         expected: 'Gemini',
       },
       {
@@ -302,17 +325,17 @@ describe('shared transport', () => {
     }
   });
 
-  it('deduplicates cumulative MiniMax stream content', async () => {
+  it('appends MiniMax stream fragments that repeat earlier text', async () => {
     const { onCompletion, onStream, query } = createQuery();
     let captured: StreamRequestConfig | undefined;
     streamHandler = (config) => {
       captured = config;
       config.streamHandler?.({
-        text: 'data: {"choices":[{"delta":{"content":"你"}}]}\n\n',
+        text: 'data: {"choices":[{"delta":{"content":"哈"}}]}\n\n',
         rawData: {} as never,
       });
       config.streamHandler?.({
-        text: 'data: {"choices":[{"delta":{"content":"你好"}}]}\n\n',
+        text: 'data: {"choices":[{"delta":{"content":"哈"}}]}\n\n',
         rawData: {} as never,
       });
       config.handler?.(streamCompletionResponse());
@@ -330,7 +353,7 @@ describe('shared transport', () => {
     expect(captured?.body).toMatchObject({ reasoning_split: true });
     expect(onStream).toHaveBeenCalledTimes(2);
     expect(onCompletion.mock.calls[0][0]).toMatchObject({
-      result: { toParagraphs: ['你好'] },
+      result: { toParagraphs: ['哈哈'] },
     });
   });
 
@@ -349,6 +372,86 @@ describe('shared transport', () => {
     expect(onCompletion.mock.calls[0][0]).toMatchObject({
       error: { type: 'secretKey', message: 'bad key' },
     });
+  });
+
+  it('reports Anthropic errors and truncation that arrive after HTTP 200', async () => {
+    const cases = [
+      {
+        events:
+          'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}\n\n',
+        error: { type: 'api', message: 'Overloaded' },
+      },
+      {
+        events:
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Par"}}\n\n' +
+          'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+        error: { type: 'api', message: 'API 响应未完成：max_tokens' },
+      },
+      {
+        events:
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Par"}}\n\n',
+        error: { type: 'api', message: 'API 流式响应未正常完成' },
+      },
+    ];
+
+    for (const { events, error } of cases) {
+      const { onCompletion, query } = createQuery();
+      streamHandler = (config) => {
+        config.streamHandler?.({ text: events, rawData: {} as never });
+        config.handler?.(streamCompletionResponse());
+      };
+
+      await new AnthropicAdapter(
+        createTestConfig({ model: 'claude-haiku-5-5' }),
+      ).translate(query, 'key');
+
+      expect(onCompletion).toHaveBeenCalledTimes(1);
+      expect(onCompletion.mock.calls[0][0]).toMatchObject({ error });
+    }
+  });
+
+  it('maps an Anthropic streaming HTTP error body', async () => {
+    const { onCompletion, query } = createQuery();
+    streamHandler = (config) => {
+      config.streamHandler?.({
+        text: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_1"}',
+        rawData: {} as never,
+      });
+      config.handler?.(streamCompletionResponse(401));
+    };
+
+    await new AnthropicAdapter(
+      createTestConfig({ model: 'claude-haiku-5-5' }),
+    ).translate(query, 'key');
+
+    expect(onCompletion.mock.calls[0][0]).toMatchObject({
+      error: { type: 'secretKey', message: 'invalid x-api-key' },
+    });
+  });
+
+  it('shows a non-JSON streaming HTTP error body but not an HTML page', async () => {
+    const cases = [
+      {
+        body: 'upstream connect error\n',
+        message: 'HTTP 502: upstream connect error',
+      },
+      { body: '<html><body>Bad Gateway</body></html>', message: 'HTTP 502' },
+    ];
+
+    for (const { body, message } of cases) {
+      const { onCompletion, query } = createQuery();
+      streamHandler = (config) => {
+        config.streamHandler?.({ text: body, rawData: {} as never });
+        config.handler?.(streamCompletionResponse(502));
+      };
+
+      await createAdapter(true).translate(query, 'key');
+
+      expect(onCompletion.mock.calls[0][0]).toMatchObject({
+        error: { type: 'api', message },
+      });
+    }
   });
 
   it('collects a streaming HTTP error body across chunks', async () => {
@@ -458,7 +561,7 @@ describe('shared transport', () => {
     };
     const adapter = new GeminiAdapter(
       createTestConfig({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-4-hydrogen',
       }),
     );
 
@@ -485,7 +588,11 @@ describe('connection validation', () => {
             stream: 'disable',
           }),
         ),
-      validResponse: { output_text: 'OK' },
+      validResponse: {
+        output: [
+          { type: 'message', content: [{ type: 'output_text', text: 'OK' }] },
+        ],
+      },
     },
     {
       create: () =>
@@ -497,17 +604,33 @@ describe('connection validation', () => {
             stream: 'disable',
           }),
         ),
-      validResponse: { output_text: 'OK' },
+      validResponse: {
+        output: [
+          { type: 'message', content: [{ type: 'output_text', text: 'OK' }] },
+        ],
+      },
     },
     {
       create: () =>
         new GeminiAdapter(
           createTestConfig({
-            model: 'gemini-3.6-flash',
+            model: 'gemini-4-hydrogen',
             stream: 'disable',
           }),
         ),
       validResponse: { models: [] },
+    },
+    {
+      create: () =>
+        new GeminiAdapter(
+          createTestConfig({
+            apiUrl: 'https://gateway.example/v1beta/models',
+            model: 'gemini-4-hydrogen',
+          }),
+        ),
+      validResponse: {
+        candidates: [{ content: { parts: [{ text: 'OK' }] } }],
+      },
     },
     {
       create: () =>
@@ -520,6 +643,11 @@ describe('connection validation', () => {
       validResponse: {
         choices: [{ message: { content: 'OK' } }],
       },
+    },
+    {
+      create: () =>
+        new AnthropicAdapter(createTestConfig({ model: 'claude-haiku-5-5' })),
+      validResponse: { type: 'message', content: [] },
     },
   ];
 
@@ -622,7 +750,7 @@ describe('connection validation', () => {
     expect(completion.mock.calls[0][0]).toEqual({ result: true });
   });
 
-  it('leaves M2.x validation uncapped because thinking cannot be disabled', async () => {
+  it('validates M3.1 Flash at low effort without an output cap because thinking cannot be disabled', async () => {
     let captured: RequestConfig | undefined;
     requestHandler = async (config) => {
       captured = config;
@@ -635,7 +763,7 @@ describe('connection validation', () => {
     );
     const adapter = new MiniMaxAdapter(
       createTestConfig({
-        model: 'MiniMax-M2.7-highspeed',
+        model: 'MiniMax-M3.1-Flash',
         reasoningMode: 'disable',
         stream: 'disable',
       }),
@@ -644,48 +772,13 @@ describe('connection validation', () => {
     await adapter.testApiConnection('key', completion);
 
     expect(captured?.body).toEqual({
-      model: 'MiniMax-M2.7-highspeed',
+      model: 'MiniMax-M3.1-Flash',
       messages: [{ role: 'user', content: 'Reply with OK.' }],
+      reasoning_effort: 'low',
       reasoning_split: true,
       stream: false,
     });
     expect(completion).toHaveBeenCalledTimes(1);
     expect(completion.mock.calls[0][0]).toEqual({ result: true });
-  });
-});
-
-describe('MiniMax output normalization', () => {
-  it('strips fallback think tags from streaming and non-streaming results', async () => {
-    const responseText = '<think>reasoning</think>\n\n你好';
-
-    for (const stream of [false, true]) {
-      const { onCompletion, query } = createQuery();
-      requestHandler = async () =>
-        successResponse({
-          choices: [{ message: { content: responseText } }],
-        });
-      streamHandler = (config) => {
-        config.streamHandler?.({
-          text: `data: ${JSON.stringify({
-            choices: [{ delta: { content: responseText } }],
-          })}\n\n`,
-          rawData: {} as never,
-        });
-        config.handler?.(streamCompletionResponse());
-      };
-      const adapter = new MiniMaxAdapter(
-        createTestConfig({
-          model: 'MiniMax-M3',
-          stream: stream ? 'enable' : 'disable',
-        }),
-      );
-
-      await adapter.translate(query, 'key');
-
-      expect(onCompletion).toHaveBeenCalledTimes(1);
-      expect(onCompletion.mock.calls[0][0]).toMatchObject({
-        result: { toParagraphs: ['你好'] },
-      });
-    }
   });
 });

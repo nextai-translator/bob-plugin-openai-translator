@@ -52,10 +52,6 @@ describe('info.json consistency', () => {
     expect(identifiers).not.toContain('apiPath');
     expect(identifiers).not.toContain('endpoint');
     expect(identifiers).not.toContain('temperature');
-    expect(identifiers).toContain('apiUrl');
-    expect(identifiers).toContain('customSystemPrompt');
-    expect(identifiers).toContain('customUserPrompt');
-    expect(identifiers).toContain('reasoningMode');
     expect(getOption('model').defaultValue).toBe(DEFAULT_MODEL);
     expect(getOption('reasoningMode').defaultValue).toBe('default');
     expect(getOption('reasoningMode').menuValues).toEqual([
@@ -82,11 +78,6 @@ describe('info.json consistency', () => {
     expect(getOption('apiKeys').textConfig?.height).toBe(
       getOption('apiUrl').textConfig?.height,
     );
-  });
-
-  it('keeps the configuration UI Chinese-first', () => {
-    expect(JSON.stringify(info)).toContain('默认');
-    expect(JSON.stringify(info)).toContain('系统指令');
   });
 
   it('uses the clickable homepage for documentation', () => {

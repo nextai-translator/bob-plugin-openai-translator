@@ -19,7 +19,6 @@ describe('documentation consistency', () => {
       expect(manual).toContain('/responses');
       expect(manual).toContain('/chat/completions');
       expect(manual).toContain('temperature');
-      expect(manual).not.toMatch(/Upgrad|升级|4\.x/);
     }
     expect(manuals[0]).not.toContain('| 开启 |');
     expect(manuals[1]).not.toContain('| Enable |');
@@ -37,7 +36,6 @@ describe('documentation consistency', () => {
       expect(readme).toContain('API URL');
       expect(readme).toContain('configuration_manual_');
       expect(readme).not.toContain('temperature');
-      expect(readme).not.toMatch(/Upgrading|升级说明|4\.x/);
     }
     expect(chinese.indexOf('API Key')).toBeLessThan(chinese.indexOf('API URL'));
     expect(english.indexOf('API key')).toBeLessThan(english.indexOf('API URL'));

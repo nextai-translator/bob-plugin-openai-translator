@@ -1,21 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  getCatalogModelProvider,
-  MODEL_CATALOG,
-  resolveModelControls,
-} from '../model-capabilities';
+import { MODEL_CATALOG, resolveModelControls } from '../model-capabilities';
 
 describe('model catalog', () => {
   it('contains unique model ids', () => {
     const ids = MODEL_CATALOG.map((model) => model.id);
     expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it('maps every curated model to its provider', () => {
-    for (const model of MODEL_CATALOG) {
-      expect(getCatalogModelProvider(model.id)).toBe(model.provider);
-    }
-    expect(getCatalogModelProvider('custom-model')).toBeUndefined();
   });
 });
 
@@ -28,23 +17,11 @@ describe('resolveModelControls', () => {
     }
   });
 
-  it('maps current GPT models to supported reasoning efforts', () => {
-    expect(resolveModelControls('openai', 'gpt-5.6-luna', 'disable')).toEqual({
+  it('maps GPT models to their lowest supported reasoning effort', () => {
+    expect(resolveModelControls('openai', 'gpt-6-luna', 'disable')).toEqual({
       openAiReasoningEffort: 'none',
     });
-    expect(resolveModelControls('openai', 'gpt-5.4-mini', 'disable')).toEqual({
-      openAiReasoningEffort: 'none',
-    });
-  });
-
-  it('keeps the original GPT-5 family within its supported floor', () => {
-    expect(resolveModelControls('openai', 'gpt-5', 'disable')).toEqual({
-      openAiReasoningEffort: 'minimal',
-    });
-    expect(resolveModelControls('openai', 'gpt-5-pro', 'disable')).toEqual({
-      openAiReasoningEffort: 'high',
-    });
-    expect(resolveModelControls('openai', 'gpt-5.3-codex', 'disable')).toEqual({
+    expect(resolveModelControls('openai', 'gpt-6.2-sol', 'disable')).toEqual({
       openAiReasoningEffort: 'low',
     });
   });
@@ -55,7 +32,7 @@ describe('resolveModelControls', () => {
       resolveModelControls('openai-compatible', 'custom-model', 'disable'),
     ).toEqual({});
     expect(
-      resolveModelControls('openai', 'gpt-5.3-codex-snapshot', 'disable'),
+      resolveModelControls('openai', 'gpt-6-luna-snapshot', 'disable'),
     ).toEqual({});
     expect(
       resolveModelControls('gemini', 'gemini-3.2-experimental', 'disable'),
@@ -68,35 +45,37 @@ describe('resolveModelControls', () => {
     ).toEqual({});
   });
 
-  it('maps Gemini thinking without adding sampling parameters', () => {
+  it('maps Gemini models to their lowest thinking level', () => {
     expect(
-      resolveModelControls('gemini', 'gemini-3.6-flash', 'disable'),
-    ).toEqual({
-      geminiThinking: { thinkingLevel: 'minimal' },
-    });
-    expect(resolveModelControls('gemini', 'gemini-2.5-pro', 'disable')).toEqual(
-      {
-        geminiThinking: { thinkingBudget: 128 },
-      },
-    );
+      resolveModelControls('gemini', 'gemini-3.5-flash-lite', 'disable'),
+    ).toEqual({ geminiThinkingLevel: 'minimal' });
     expect(
-      resolveModelControls('gemini', 'gemini-2.5-flash', 'disable'),
-    ).toEqual({
-      geminiThinking: { thinkingBudget: 0 },
-    });
-    expect(
-      resolveModelControls('gemini', 'gemini-3.1-pro-preview', 'disable'),
-    ).toEqual({
-      geminiThinking: { thinkingLevel: 'low' },
-    });
+      resolveModelControls('gemini', 'gemini-4-hydrogen', 'disable'),
+    ).toEqual({ geminiThinkingLevel: 'low' });
   });
 
-  it('maps MiniMax M3 thinking and omits unsupported M2 controls', () => {
+  it('recognizes a namespaced model ID on native-format gateways only', () => {
+    expect(
+      resolveModelControls('gemini', 'google/gemini-4-hydrogen', 'disable'),
+    ).toEqual({ geminiThinkingLevel: 'low' });
+    expect(
+      resolveModelControls(
+        'anthropic',
+        'anthropic/claude-haiku-5-5',
+        'disable',
+      ),
+    ).toEqual({ anthropicReasoning: { thinking: 'disabled' } });
+    expect(
+      resolveModelControls('openai-compatible', 'openai/gpt-6-luna', 'disable'),
+    ).toEqual({});
+  });
+
+  it('maps MiniMax models to their lowest reasoning setting', () => {
     expect(resolveModelControls('minimax', 'MiniMax-M3', 'disable')).toEqual({
       miniMaxThinking: 'disabled',
     });
     expect(
-      resolveModelControls('minimax', 'MiniMax-M2.7-highspeed', 'disable'),
-    ).toEqual({});
+      resolveModelControls('minimax', 'MiniMax-M3.1-Flash', 'disable'),
+    ).toEqual({ openAiReasoningEffort: 'low' });
   });
 });

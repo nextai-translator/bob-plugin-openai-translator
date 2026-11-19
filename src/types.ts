@@ -5,6 +5,7 @@ import type {
 } from '@bob-translate/types';
 
 export type ServiceProvider =
+  | 'anthropic'
   | 'azure-openai'
   | 'gemini'
   | 'minimax'
@@ -12,6 +13,7 @@ export type ServiceProvider =
   | 'openai-compatible';
 
 export type ApiProtocol =
+  | 'anthropic-messages'
   | 'gemini-generate-content'
   | 'openai-chat-completions'
   | 'openai-responses';

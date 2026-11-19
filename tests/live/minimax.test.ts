@@ -60,7 +60,7 @@ describe('MiniMax live API', () => {
             Authorization: `Bearer ${MINIMAX_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'MiniMax-M2.7-highspeed',
+            model: 'MiniMax-M3.1-Flash',
             messages: [
               {
                 role: 'system',
@@ -93,11 +93,7 @@ describe('MiniMax live API', () => {
             }>;
           };
           const content = parsed.choices?.[0]?.delta?.content;
-          if (content) {
-            fullText = content.startsWith(fullText)
-              ? content
-              : fullText + content;
-          }
+          if (content) fullText += content;
         },
       });
       const decoder = new TextDecoder();
@@ -106,7 +102,6 @@ describe('MiniMax live API', () => {
         if (done) break;
         parser.feed(decoder.decode(value, { stream: true }));
       }
-      parser.reset({ consume: true });
 
       expect(fullText.length).toBeGreaterThan(0);
     },

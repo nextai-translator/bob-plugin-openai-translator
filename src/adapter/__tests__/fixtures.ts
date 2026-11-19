@@ -10,7 +10,7 @@ export const createTestConfig = (
     customModel: '',
     customSystemPrompt: '',
     customUserPrompt: '',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-6-luna',
     reasoningMode: 'default',
     stream: 'enable',
     ...overrides,

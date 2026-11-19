@@ -32,7 +32,7 @@ const config = parseOptions({
   customModel: '',
   customSystemPrompt: '',
   customUserPrompt: '',
-  model: 'gpt-5.6-luna',
+  model: 'gpt-6-luna',
   reasoningMode: 'default',
   stream: 'enable',
 });
@@ -44,18 +44,19 @@ const query = {
   onStream: () => {},
 } as unknown as TextTranslateQuery;
 
-const streamParser = new SseStreamHandler({
+const streamConfig = {
   troubleshootingLink: '',
-  extractDelta: (data) => (typeof data.delta === 'string' ? data.delta : null),
+  extractDelta: (data: Record<string, unknown>) =>
+    typeof data.delta === 'string' ? data.delta : null,
   extractError: () => null,
   isComplete: () => false,
-});
+};
 const streamEvent =
   'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"x"}\n\n';
 
 const results = {
   capabilityResolution: measure(() => {
-    resolveModelControls('openai', 'gpt-5.6-luna', 'default');
+    resolveModelControls('openai', 'gpt-6-luna', 'disable');
   }),
   providerConstruction: measure(() => {
     getServiceAdapter(config);
@@ -64,8 +65,7 @@ const results = {
     adapter.buildRequestBody(query);
   }),
   streamEventParsing: measure(() => {
-    streamParser.reset(query);
-    streamParser.feed(streamEvent);
+    new SseStreamHandler(streamConfig, query).feed(streamEvent);
   }),
 };
 

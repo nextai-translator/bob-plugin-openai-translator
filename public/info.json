@@ -31,7 +31,7 @@
       "type": "text"
     },
     {
-      "defaultValue": "gpt-5.6-luna",
+      "defaultValue": "gpt-6-luna",
       "identifier": "model",
       "menuValues": [
         {
@@ -39,28 +39,36 @@
           "value": "custom"
         },
         {
+          "title": "claude-haiku-5-5",
+          "value": "claude-haiku-5-5"
+        },
+        {
+          "title": "claude-sonnet-5-5",
+          "value": "claude-sonnet-5-5"
+        },
+        {
           "title": "gemini-3.5-flash-lite",
           "value": "gemini-3.5-flash-lite"
         },
         {
-          "title": "gemini-3.6-flash",
-          "value": "gemini-3.6-flash"
+          "title": "gemini-4-hydrogen",
+          "value": "gemini-4-hydrogen"
         },
         {
-          "title": "gpt-5.4-mini",
-          "value": "gpt-5.4-mini"
+          "title": "gpt-6-luna",
+          "value": "gpt-6-luna"
         },
         {
-          "title": "gpt-5.6-luna",
-          "value": "gpt-5.6-luna"
-        },
-        {
-          "title": "MiniMax-M2.7-highspeed",
-          "value": "MiniMax-M2.7-highspeed"
+          "title": "gpt-6.1-terra",
+          "value": "gpt-6.1-terra"
         },
         {
           "title": "MiniMax-M3",
           "value": "MiniMax-M3"
+        },
+        {
+          "title": "MiniMax-M3.1-Flash",
+          "value": "MiniMax-M3.1-Flash"
         }
       ],
       "title": "模型",
@@ -70,7 +78,7 @@
       "desc": "选择「自定义模型」时必填",
       "identifier": "customModel",
       "textConfig": {
-        "placeholderText": "gpt-5.6-terra",
+        "placeholderText": "gpt-6.2-sol",
         "type": "visible"
       },
       "title": "自定义模型",
@@ -136,6 +144,6 @@
       "type": "text"
     }
   ],
-  "summary": "使用 OpenAI、OpenAI 兼容 API 及 Gemini 等主流模型进行翻译与文本处理",
+  "summary": "使用 OpenAI、Claude、Gemini、MiniMax 及 OpenAI 兼容 API 进行翻译与文本处理",
   "version": "5.0.1"
 }
