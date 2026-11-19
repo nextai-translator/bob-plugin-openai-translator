@@ -4,7 +4,6 @@ import type {
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
-import type { EventSourceMessage } from 'eventsource-parser';
 import { PROVIDERS } from '../config';
 import type { PluginConfig, ServiceAdapter } from '../types';
 import {
@@ -12,6 +11,7 @@ import {
   handleGeneralError,
   handleValidateError,
 } from '../utils/error';
+import { createTranslateResult } from '../utils/result';
 import { SseStreamHandler } from '../utils/sse';
 
 type StreamCompletionResponse = Pick<
@@ -21,20 +21,10 @@ type StreamCompletionResponse = Pick<
 type RequestConfig = Parameters<(typeof $http)['request']>[0];
 
 export abstract class BaseAdapter implements ServiceAdapter {
-  private readonly sseHandler: SseStreamHandler;
-
-  constructor(protected readonly config: PluginConfig) {
-    this.sseHandler = new SseStreamHandler({
-      troubleshootingLink: PROVIDERS[config.provider].documentationUrl,
-      extractDelta: (data, event) => this.extractStreamDelta(data, event),
-      extractError: (data, link) => this.extractStreamError(data, link),
-      isComplete: (data, event) => this.isStreamComplete(data, event),
-    });
-  }
+  constructor(protected readonly config: PluginConfig) {}
 
   protected abstract extractStreamDelta(
     data: Record<string, unknown>,
-    event: EventSourceMessage,
   ): string | null;
 
   protected abstract extractStreamError(
@@ -46,10 +36,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
     response: HttpResponse<unknown>,
   ): ServiceError;
 
-  protected isStreamComplete(
-    _data: Record<string, unknown>,
-    _event: EventSourceMessage,
-  ): boolean {
+  protected isStreamComplete(_data: Record<string, unknown>): boolean {
     return false;
   }
 
@@ -61,7 +48,9 @@ export abstract class BaseAdapter implements ServiceAdapter {
 
   abstract buildRequestBody(query: TextTranslateQuery): Record<string, unknown>;
 
-  abstract getTextGenerationUrl(): string;
+  public getTextGenerationUrl(): string {
+    return this.config.endpoint;
+  }
 
   abstract parseResponse(response: HttpResponse<unknown>): string;
 
@@ -95,7 +84,15 @@ export abstract class BaseAdapter implements ServiceAdapter {
     body: Record<string, unknown>,
     query: TextTranslateQuery,
   ): Promise<void> {
-    this.sseHandler.reset(query);
+    const sseHandler = new SseStreamHandler(
+      {
+        troubleshootingLink: PROVIDERS[this.config.provider].documentationUrl,
+        extractDelta: (data) => this.extractStreamDelta(data),
+        extractError: (data, link) => this.extractStreamError(data, link),
+        isComplete: (data) => this.isStreamComplete(data),
+      },
+      query,
+    );
 
     return new Promise((resolve) => {
       let completed = false;
@@ -106,8 +103,6 @@ export abstract class BaseAdapter implements ServiceAdapter {
         callback();
       };
       const handleResult = (result: StreamCompletionResponse) => {
-        if (completed) return;
-
         if (result.error) {
           complete(() =>
             this.completeWithError(
@@ -118,10 +113,11 @@ export abstract class BaseAdapter implements ServiceAdapter {
           return;
         }
 
-        this.sseHandler.finish();
+        sseHandler.finish();
         if (result.response.statusCode >= 400) {
           const statusCode = result.response.statusCode;
-          const providerError = this.sseHandler.getProviderError();
+          const providerError = sseHandler.getProviderError();
+          const body = sseHandler.getBodyPreview();
           complete(() =>
             this.completeWithError(
               query,
@@ -130,19 +126,22 @@ export abstract class BaseAdapter implements ServiceAdapter {
                   statusCode === 401 || statusCode === 403
                     ? 'secretKey'
                     : 'api',
-                message: `HTTP ${statusCode}`,
+                message:
+                  body && !body.startsWith('<')
+                    ? `HTTP ${statusCode}: ${body}`
+                    : `HTTP ${statusCode}`,
               },
             ),
           );
           return;
         }
 
-        const streamError = this.sseHandler.getError();
+        const streamError = sseHandler.getError();
         if (streamError) {
           complete(() => this.completeWithError(query, streamError));
           return;
         }
-        if (this.requiresStreamCompletion() && !this.sseHandler.isComplete()) {
+        if (this.requiresStreamCompletion() && !sseHandler.isComplete()) {
           complete(() =>
             this.completeWithError(query, {
               type: 'api',
@@ -152,18 +151,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
           return;
         }
 
-        const text = this.sseHandler.getText();
-        if (!text) {
-          complete(() =>
-            this.completeWithError(query, {
-              type: 'api',
-              message: 'API 未返回译文',
-            }),
-          );
-          return;
-        }
-
-        complete(() => this.completeWithText(query, text));
+        complete(() => this.completeWithText(query, sseHandler.getText()));
       };
 
       try {
@@ -175,7 +163,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
           body,
           cancelSignal: query.cancelSignal,
           streamHandler: (stream) => {
-            if (!completed && stream.text) this.sseHandler.feed(stream.text);
+            if (!completed && stream.text) sseHandler.feed(stream.text);
           },
           handler: handleResult,
         });
@@ -193,39 +181,33 @@ export abstract class BaseAdapter implements ServiceAdapter {
     body: Record<string, unknown>,
     query: TextTranslateQuery,
   ): Promise<void> {
-    try {
-      const result = await this.performRequest({
-        method: 'POST',
-        url,
-        header: headers,
-        body,
-        cancelSignal: query.cancelSignal,
-      });
+    const result = await this.performRequest({
+      method: 'POST',
+      url,
+      header: headers,
+      body,
+      cancelSignal: query.cancelSignal,
+    });
 
-      if (result.response.statusCode >= 400) {
-        this.completeWithError(query, this.extractErrorFromResponse(result));
-        return;
-      }
-
-      this.completeWithText(query, this.parseResponse(result));
-    } catch (error) {
-      this.completeWithError(query, error);
+    if (result.response.statusCode >= 400) {
+      this.completeWithError(query, this.extractErrorFromResponse(result));
+      return;
     }
+
+    this.completeWithText(query, this.parseResponse(result));
   }
 
   protected async performRequest(
     config: RequestConfig,
   ): Promise<HttpResponse<unknown>> {
+    let response: HttpResponse<unknown>;
     try {
-      const response = await $http.request(config);
-      if (response.error) throw this.createNetworkError(response.error);
-      return response;
+      response = await $http.request(config);
     } catch (error) {
-      const serviceError = convertToServiceError(error);
-      throw serviceError.type === 'network'
-        ? serviceError
-        : this.createNetworkError(error);
+      throw this.createNetworkError(error);
     }
+    if (response.error) throw this.createNetworkError(response.error);
+    return response;
   }
 
   protected async validateConnection(
@@ -258,13 +240,11 @@ export abstract class BaseAdapter implements ServiceAdapter {
   }
 
   protected completeWithText(query: TextTranslateQuery, text: string): void {
-    query.onCompletion({
-      result: {
-        from: query.detectFrom,
-        to: query.detectTo,
-        toParagraphs: [text],
-      },
-    });
+    if (!text.trim()) {
+      this.completeWithError(query, { type: 'api', message: 'API 未返回译文' });
+      return;
+    }
+    query.onCompletion({ result: createTranslateResult(query, text) });
   }
 
   protected completeWithError(query: TextTranslateQuery, error: unknown): void {

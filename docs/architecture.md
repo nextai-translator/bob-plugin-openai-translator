@@ -1,6 +1,6 @@
 # Architecture
 
-Last verified: 2026-07-23.
+Last verified: 2026-11-20.
 
 ## Runtime boundary
 
@@ -21,7 +21,7 @@ $option
 - `src/config.ts` parses and freezes one configuration object, derives the provider, and rejects invalid complete API URLs.
 - `src/utils/model-capabilities.ts` owns the curated model catalog and model-specific reasoning mappings.
 - `src/adapter/*.ts` owns provider URL, authentication, wire request, wire response, validation, and stream event shapes.
-- `src/adapter/base.ts` owns cancellation, network lifecycle, and exactly-once completion.
+- `src/adapter/base.ts` owns cancellation, network lifecycle, and stream completion.
 - `src/utils/sse.ts` owns bounded SSE parsing independently of provider capability rules.
 
 Adapters never read `$option`. Provider codecs receive a validated configuration and do not know how Bob stores options.
@@ -33,8 +33,8 @@ Bob's public option schema provides static `text` and `menu` fields. It does not
 The current configuration uses these decisions:
 
 - The default OpenAI path parses and runs when Bob supplies only an API Key. Runtime defaults cover model, streaming, and reasoning.
-- Provider is derived rather than user-selected. With no API URL, the model selects the official OpenAI, Gemini, or MiniMax adapter. With an API URL, Azure hosts and paths select Azure OpenAI, verified MiniMax official hosts retain the MiniMax stream codec, and other URLs use the OpenAI-compatible adapter.
-- API URL is optional and complete. The `/responses` or `/chat/completions` suffix selects the protocol without separate Base URL, path, or protocol fields.
+- Provider is derived rather than user-selected. With no API URL, the model selects the official Anthropic, Gemini, MiniMax, or OpenAI adapter. With an API URL, the ending selects the wire format: `/messages` uses the Anthropic adapter and `/models` the Gemini adapter. For the two OpenAI endings, Azure hosts and `/openai/deployments/` paths select Azure OpenAI, official MiniMax hosts select the MiniMax request contract, and other URLs use the OpenAI-compatible adapter.
+- API URL is optional. Its ending (`/chat/completions`, `/messages`, `/models`, or `/responses`) selects the protocol and its authentication header without separate Base URL, path, or protocol fields. A Gemini URL stops at `/models` because the model and operation are path segments the adapter appends.
 - Temperature is absent from the UI and every request. Provider defaults avoid invalid parameters as model sampling contracts evolve.
 - Reasoning has two choices. Default sends no control. Disable maps to the lowest verified model-specific setting; models without a verified mapping receive no control.
 - Editable System Prompt and User Prompt defaults preserve their distinct roles: the system prompt defines purpose, while the user prompt shapes each input within that purpose. Both support `$text`, `$sourceLang`, and `$targetLang`.
@@ -45,8 +45,9 @@ The current configuration uses these decisions:
 
 | Provider | Protocol | Authentication | Validation |
 | --- | --- | --- | --- |
+| Anthropic | Messages | `x-api-key` header | Minimal generation request |
 | Azure OpenAI | Responses or Chat Completions | `api-key` header | Minimal generation request |
-| Gemini | GenerateContent | `x-goog-api-key` header | Model listing |
+| Gemini | GenerateContent | `x-goog-api-key` header | Model listing; minimal generation request for a configured URL |
 | MiniMax | Chat Completions | Bearer token | Minimal generation request |
 | OpenAI | Responses | Bearer token | `GET /v1/models` |
 | OpenAI Compatible | Responses or Chat Completions | Bearer token | Minimal generation request |
@@ -59,26 +60,31 @@ Provider dispatch is an exhaustive TypeScript switch. A new wire provider requir
 
 Default always omits the provider control.
 
-Only exact model IDs with a current provider contract receive a control:
+Only model IDs with a current provider contract receive a control. The Anthropic and Gemini adapters ignore a `vendor/` namespace before the ID, because a gateway that speaks the native format serves the same model; OpenAI-compatible gateways define their own reasoning parameters, so their IDs must match exactly.
 
 | Model ID | Disable |
 | --- | --- |
-| `gemini-2.5-flash`, `gemini-2.5-flash-lite` | thinking budget `0` |
-| `gemini-2.5-pro` | thinking budget `128` |
-| `gemini-3-flash-preview`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.6-flash` | thinking level `minimal` |
-| `gemini-3-pro-preview`, `gemini-3.1-pro-preview` | thinking level `low` |
-| `gpt-5` | `minimal` |
-| `gpt-5.3-codex` | `low` |
-| `gpt-5.4-mini`, `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra` | `none` |
-| `gpt-5-pro` | `high` |
+| `claude-fable-5-2`, `claude-opus-5-5` | effort `low` |
+| `claude-haiku-5-5` | thinking `disabled` |
+| `claude-sonnet-5-5` | thinking `between_tools` |
+| `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemini-3.6-flash` | thinking level `minimal` |
+| `gemini-3.1-pro-preview`, `gemini-3.8-flash`, `gemini-4-argon`, `gemini-4-carbon`, `gemini-4-hydrogen`, `gemini-4-neon` | thinking level `low` |
+| `gpt-5` | effort `minimal` |
+| `gpt-5.3-codex`, `gpt-6.2-astra`, `gpt-6.2-sol` | effort `low` |
+| `gpt-5.4-mini`, `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-6-luna`, `gpt-6.1-terra` | effort `none` |
 | `MiniMax-M3` | thinking `disabled` |
+| `MiniMax-M3.1-Flash` | effort `low` |
 | Any other ID | omitted |
 
-Request codecs translate the normalized result into `reasoning`, `reasoning_effort`, `thinkingConfig`, or `thinking`. Capability code does not construct transport payloads.
+The curated menu lists two models per provider: the most efficient current model and the next tier above it.
 
-MiniMax requests set `reasoning_split` so reasoning does not enter the translated text. Its documented cumulative stream content is converted back to deltas before Bob callbacks.
+Request codecs translate the normalized result into `reasoning`, `reasoning_effort`, `thinkingConfig`, `thinking`, or `output_config`. Capability code does not construct transport payloads.
 
-MiniMax validation disables thinking and limits output for M3. It does not cap M2.x output because those models cannot disable thinking, and a short limit can end the response before translated content appears.
+MiniMax requests set `reasoning_split` so reasoning arrives in a separate field and does not enter the translated text.
+
+MiniMax validation disables thinking and limits output for M3. A model that cannot disable thinking is validated at its lowest effort without an output cap, because a short limit can end the response before translated content appears.
+
+Anthropic Messages requires `max_tokens`, and thinking spends from the same budget, so the adapter sends one fixed cap below every current model's output limit. A response whose stop reason is anything other than `end_turn` or `stop_sequence` is an error rather than a partial translation, and a stream must end with `message_stop`. A Gemini stream must end with a `STOP` finish reason. Chat Completions (`length`, `content_filter`) and Gemini (any finish reason other than `STOP`) responses are checked the same way. Validation accepts any `message` object because default thinking can use the whole validation budget before text appears.
 
 Gemini uses stateless `generateContent` and `streamGenerateContent` requests because each Bob translation is one independent generation. The Interactions API's stateful and agentic lifecycle is not needed here.
 
@@ -95,10 +101,12 @@ The metadata test fails if the menu and runtime catalog differ.
 
 - Streaming and non-streaming requests both receive `query.cancelSignal`.
 - Every translation calls `query.onCompletion` once.
+- Result text reaches Bob unmodified, because leading indentation is Markdown syntax.
 - Provider error events are parsed before text deltas.
 - Invalid SSE is an API error, not an empty success.
 - SSE buffering is limited to 1 MiB.
-- Non-streaming output is returned as one paragraph so Bob preserves model formatting and blank lines.
+- Results carry `content` with the `markdown` format for Bob 1.21.0 and later, plus a one-element `toParagraphs` that earlier versions read as plain text.
+- A streaming HTTP error whose body is not JSON reports the start of that body unless it is an HTML page.
 - Validation completes on every success, error, and unexpected-response path.
 - API keys and authorization headers are never logged.
 
@@ -160,25 +168,30 @@ The official sitemap and plugin sidebar exposed 29 `/plugin/` pages. All 29 were
 | 22 | [`$timer`](https://bobtranslate.com/plugin/api/timer.html) | Reviewed; no timer-based batching required |
 | 23 | [`$signal`](https://bobtranslate.com/plugin/api/signal.html) | Cancellation signal contract |
 | 24 | [Service error](https://bobtranslate.com/plugin/object/serviceerror.html) | Error type, message, addition, troubleshooting link |
-| 25 | [Translate result](https://bobtranslate.com/plugin/object/translateresult.html) | Paragraph preservation and optional Bob 1.15 reasoning display |
+| 25 | [Translate result](https://bobtranslate.com/plugin/object/translateresult.html) | `content` format, `toParagraphs` fallback, and optional Bob 1.15 reasoning display |
 | 26 | [OCR result](https://bobtranslate.com/plugin/object/ocrresult.html) | Reviewed; outside this translate plugin |
 | 27 | [TTS result](https://bobtranslate.com/plugin/object/ttsresult.html) | Reviewed; outside this translate plugin |
 | 28 | [Built-in icons](https://bobtranslate.com/plugin/addition/icon.html) | Reviewed; repository icon retained |
 | 29 | [Language codes](https://bobtranslate.com/plugin/addition/language.html) | Bob language IDs and supported-language list |
 
-The linked [Bob 1.8 plugin changes](https://bobtranslate.com/blog/2023-05-18-180-plugin.html) were also reviewed for streaming and cancellation behavior.
+The linked [Bob 1.8 plugin changes](https://bobtranslate.com/blog/2023-05-18-180-plugin.html) were also reviewed for streaming and cancellation behavior, and [Bob 1.21 Markdown results](https://bobtranslate.com/blog/2026-09-21-markdown-plugin.html) for the `content` object.
+
+The option model compiled into Bob 1.22.0 has the same fields as the documented schema: `text` and `menu` options, with no conditional or grouping field.
 
 ## Provider sources
 
 - [Azure OpenAI Responses](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses)
+- [Claude API errors](https://platform.claude.com/docs/en/api/errors)
+- [Claude models](https://platform.claude.com/docs/en/about-claude/models/overview)
+- [Claude streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
+- [Claude thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)
 - [Cloudflare AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
-- [Gemini API selection](https://ai.google.dev/api)
-- [Gemini latest models and sampling changes](https://ai.google.dev/gemini-api/docs/generate-content/latest-model)
-- [Gemini prompting strategies](https://ai.google.dev/gemini-api/docs/prompting-strategies)
-- [Gemini thinking](https://ai.google.dev/gemini-api/docs/thinking)
+- [Gemini models](https://aistudio.google.com/docs/models)
+- [Gemini thinking](https://aistudio.google.com/docs/thinking.md?generate-content=true)
 - [MiniMax China OpenAI-compatible API](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)
 - [MiniMax OpenAI-compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)
-- [OpenAI model guidance](https://developers.openai.com/api/docs/guides/latest-model)
+- [OpenAI deprecations](https://developers.openai.com/api/docs/deprecations)
+- [OpenAI models](https://developers.openai.com/api/docs/models)
 - [OpenAI prompt engineering](https://developers.openai.com/api/docs/guides/prompt-engineering)
 - [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning)
 - [OpenAI Responses migration](https://developers.openai.com/api/docs/guides/migrate-to-responses)
@@ -190,7 +203,8 @@ The linked [Bob 1.8 plugin changes](https://bobtranslate.com/blog/2023-05-18-180
 - Undocumented Bob option fields such as `dependsOn`
 - A user-visible provider or API-protocol selector
 - Separate API Base URL and API Path fields
-- Provider SDKs, `fetch`, browser streams, or Node.js runtime modules
+- Provider SDKs, `fetch`, browser streams, or Node.js runtime modules. Bundled for a browser target, `@anthropic-ai/sdk`, `openai`, `@google/genai`, and `@ai-sdk/anthropic` each exceed 350 KB minified and fail in bare JavaScriptCore on missing `Headers`, `Response`, `ReadableStream`, or `TransformStream`
+- Displaying model reasoning through `thinkInfo`, which adds a per-protocol delta codec without a translation use case
 - A global Temperature override
 - A dependency-injection container or generic protocol framework
 - Multiple separately published plugins solely to obtain provider-specific settings forms

@@ -1,86 +1,75 @@
 import type { ServiceError, TextTranslateQuery } from '@bob-translate/types';
 import {
   createParser,
-  type EventSourceMessage,
   type EventSourceParser,
   type ParseError,
 } from 'eventsource-parser';
-
-export type DeltaExtractor = (
-  data: Record<string, unknown>,
-  event: EventSourceMessage,
-) => string | null;
-
-export type ErrorExtractor = (
-  data: Record<string, unknown>,
-  troubleshootingLink: string,
-) => ServiceError | null;
-
-export type CompletionDetector = (
-  data: Record<string, unknown>,
-  event: EventSourceMessage,
-) => boolean;
+import { createTranslateResult } from './result';
 
 interface SseStreamHandlerConfig {
-  extractDelta: DeltaExtractor;
-  extractError: ErrorExtractor;
-  isComplete: CompletionDetector;
+  extractDelta: (data: Record<string, unknown>) => string | null;
+  extractError: (
+    data: Record<string, unknown>,
+    troubleshootingLink: string,
+  ) => ServiceError | null;
+  isComplete: (data: Record<string, unknown>) => boolean;
   troubleshootingLink: string;
 }
 
 const MAX_SSE_BUFFER_SIZE = 1024 * 1024;
+const MAX_BODY_PREVIEW_LENGTH = 200;
 
 export class SseStreamHandler {
+  private bodyPreview = '';
   private complete = false;
   private error: ServiceError | null = null;
-  private parser: EventSourceParser | null = null;
+  private readonly parser: EventSourceParser;
   private providerError: ServiceError | null = null;
-  private query: TextTranslateQuery | null = null;
   private rawJsonChunks: string[] | null = [];
   private rawJsonLength = 0;
   private rawJsonStarted = false;
   private targetText = '';
 
-  constructor(private readonly config: SseStreamHandlerConfig) {}
-
-  reset(query: TextTranslateQuery): void {
-    this.complete = false;
-    this.error = null;
-    this.providerError = null;
-    this.query = query;
-    this.rawJsonChunks = [];
-    this.rawJsonLength = 0;
-    this.rawJsonStarted = false;
-    this.targetText = '';
+  constructor(
+    private readonly config: SseStreamHandlerConfig,
+    private readonly query: TextTranslateQuery,
+  ) {
     this.parser = createParser({
       maxBufferSize: MAX_SSE_BUFFER_SIZE,
       onError: (error) => this.handleParseError(error),
-      onEvent: (event) => this.handleEvent(event),
+      onEvent: (event) => this.handleEvent(event.data),
     });
   }
 
   feed(text: string): void {
     if (this.error) return;
+    this.bodyPreview += text.slice(
+      0,
+      MAX_BODY_PREVIEW_LENGTH - this.bodyPreview.length,
+    );
     this.captureRawJson(text);
-    try {
-      this.parser?.feed(text);
-    } catch (error) {
-      this.error = this.createProtocolError(
-        error instanceof Error ? error.message : 'Invalid SSE stream',
-      );
-    }
+    this.parser.feed(text);
   }
 
   finish(): void {
-    if (this.error) return;
+    if (this.error || !this.rawJsonStarted || !this.rawJsonChunks) return;
+
     try {
-      this.parser?.reset({ consume: true });
-    } catch (error) {
-      this.error = this.createProtocolError(
-        error instanceof Error ? error.message : 'Invalid SSE stream ending',
+      const providerError = this.config.extractError(
+        JSON.parse(this.rawJsonChunks.join('')) as Record<string, unknown>,
+        this.config.troubleshootingLink,
       );
+      if (providerError) {
+        this.providerError = providerError;
+        this.error = providerError;
+      }
+    } catch {
+      return;
     }
-    this.handleRawJsonError();
+  }
+
+  getBodyPreview(): string {
+    return this.bodyPreview.replace(/\s+/g, ' ').trim();
   }
 
   getError(): ServiceError | null {
@@ -129,49 +118,18 @@ export class SseStreamHandler {
     this.rawJsonChunks = null;
   }
 
-  private handleRawJsonError(): void {
-    if (this.providerError || !this.rawJsonStarted || !this.rawJsonChunks)
-      return;
-
-    this.handleJsonError(this.rawJsonChunks.join(''));
-  }
-
-  private handleJsonError(text: string): void {
-    try {
-      const parsed = JSON.parse(text) as unknown;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
-        return;
-      const providerError = this.config.extractError(
-        parsed as Record<string, unknown>,
-        this.config.troubleshootingLink,
-      );
-      if (providerError) {
-        this.providerError = providerError;
-        this.error = providerError;
-      }
-    } catch {
-      return;
-    }
-  }
-
   private handleParseError(error: ParseError): void {
     if (error.type === 'max-buffer-size-exceeded') {
       this.error = this.createProtocolError(error.message);
-      return;
     }
-    const line = error.line;
-    if (error.type !== 'unknown-field' || !line?.trimStart().startsWith('{')) {
-      return;
-    }
-    this.handleJsonError(line);
   }
 
-  private handleEvent(event: EventSourceMessage): void {
-    if (!event.data || event.data === '[DONE]') return;
+  private handleEvent(eventData: string): void {
+    if (!eventData || eventData === '[DONE]') return;
 
     let data: Record<string, unknown>;
     try {
-      data = JSON.parse(event.data) as Record<string, unknown>;
+      data = JSON.parse(eventData) as Record<string, unknown>;
     } catch {
       this.error = this.createProtocolError('SSE event data is not valid JSON');
       return;
@@ -187,20 +145,16 @@ export class SseStreamHandler {
         this.error = providerError;
         return;
       }
-      if (this.config.isComplete(data, event)) {
+      if (this.config.isComplete(data)) {
         this.complete = true;
       }
 
-      const delta = this.config.extractDelta(data, event);
-      if (!delta || !this.query) return;
+      const delta = this.config.extractDelta(data);
+      if (!delta) return;
 
       this.targetText += delta;
       this.query.onStream({
-        result: {
-          from: this.query.detectFrom,
-          to: this.query.detectTo,
-          toParagraphs: [this.targetText],
-        },
+        result: createTranslateResult(this.query, this.targetText),
       });
     } catch (error) {
       this.error = this.createProtocolError(

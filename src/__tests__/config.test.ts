@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { parseOptions } from '../config';
+import { MODEL_CATALOG } from '../utils/model-capabilities';
 
 const options = (
   overrides: Partial<Record<string, string>> = {},
@@ -9,7 +10,7 @@ const options = (
   customModel: '',
   customSystemPrompt: '',
   customUserPrompt: '',
-  model: 'gpt-5.6-luna',
+  model: 'gpt-6-luna',
   reasoningMode: 'default',
   stream: 'enable',
   ...overrides,
@@ -28,10 +29,26 @@ describe('parseOptions', () => {
     expect(Object.isFrozen(config.apiKeys)).toBe(true);
   });
 
+  it('routes every menu model to its official provider', () => {
+    for (const model of MODEL_CATALOG) {
+      expect(parseOptions(options({ model: model.id })).provider).toBe(
+        model.provider,
+      );
+    }
+  });
+
+  it('keeps Bearer authentication for a non-Azure /openai/v1 path', () => {
+    expect(
+      parseOptions(
+        options({ apiUrl: 'https://api.groq.com/openai/v1/chat/completions' }),
+      ).provider,
+    ).toBe('openai-compatible');
+  });
+
   it('infers official providers from the selected model', () => {
     const gemini = parseOptions(
       options({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-4-hydrogen',
       }),
     );
     expect(gemini).toMatchObject({
@@ -49,6 +66,40 @@ describe('parseOptions', () => {
       endpoint: 'https://api.minimax.io/v1/chat/completions',
       protocol: 'openai-chat-completions',
       provider: 'minimax',
+    });
+
+    const anthropic = parseOptions(options({ model: 'claude-sonnet-5-5' }));
+    expect(anthropic).toMatchObject({
+      endpoint: 'https://api.anthropic.com/v1/messages',
+      protocol: 'anthropic-messages',
+      provider: 'anthropic',
+    });
+  });
+
+  it('selects the native codec from the API URL ending', () => {
+    const anthropicRelay = parseOptions(
+      options({
+        apiUrl: 'https://relay.example/anthropic/v1/messages/',
+        customModel: 'vendor/claude',
+        model: 'custom',
+      }),
+    );
+    expect(anthropicRelay).toMatchObject({
+      endpoint: 'https://relay.example/anthropic/v1/messages',
+      protocol: 'anthropic-messages',
+      provider: 'anthropic',
+    });
+
+    const geminiRelay = parseOptions(
+      options({
+        apiUrl: 'https://relay.example/v1beta/models',
+        model: 'gpt-6-luna',
+      }),
+    );
+    expect(geminiRelay).toMatchObject({
+      endpoint: 'https://relay.example/v1beta/models',
+      protocol: 'gemini-generate-content',
+      provider: 'gemini',
     });
   });
 

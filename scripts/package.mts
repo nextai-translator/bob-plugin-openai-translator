@@ -78,7 +78,7 @@ async function updateProjectVersion(version: string): Promise<void> {
       if (typeof data.version !== 'string') {
         throw new Error(`${relativePath} has no string version field`);
       }
-      return { filePath, relativePath, source, version: data.version };
+      return { filePath, source, version: data.version };
     }),
   );
   const projectVersions = new Set(projectFiles.map((file) => file.version));

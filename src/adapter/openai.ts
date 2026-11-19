@@ -4,39 +4,30 @@ import type {
   TextTranslateQuery,
   ValidationCompletion,
 } from '@bob-translate/types';
-import type { EventSourceMessage } from 'eventsource-parser';
 import { resolveModelControls } from '../utils/model-capabilities';
 import { createPrompts } from '../utils/prompt';
 import { BaseAdapter } from './base';
 
 export class OpenAiAdapter extends BaseAdapter {
-  protected extractStreamDelta(
-    data: Record<string, unknown>,
-    event: EventSourceMessage,
-  ): string | null {
+  protected extractStreamDelta(data: Record<string, unknown>): string | null {
     if (this.config.protocol === 'openai-chat-completions') {
       return this.extractChatCompletionsDelta(data);
     }
-    if (
-      event.event === 'response.output_text.delta' ||
-      data.type === 'response.output_text.delta'
-    ) {
-      return typeof data.delta === 'string' ? data.delta : null;
-    }
-    return null;
+    return data.type === 'response.output_text.delta' &&
+      typeof data.delta === 'string'
+      ? data.delta
+      : null;
   }
 
   protected extractStreamError(
     data: Record<string, unknown>,
     troubleshootingLink: string,
   ): ServiceError | null {
-    if (this.config.protocol === 'openai-responses') {
-      const terminalError = this.extractResponsesTerminalError(
-        data,
-        troubleshootingLink,
-      );
-      if (terminalError) return terminalError;
-    }
+    const terminalError =
+      this.config.protocol === 'openai-responses'
+        ? this.extractResponsesTerminalError(data, troubleshootingLink)
+        : this.createFinishError(data, troubleshootingLink);
+    if (terminalError) return terminalError;
     if (!data.error || typeof data.error !== 'object') return null;
 
     return this.createApiError(
@@ -46,13 +37,9 @@ export class OpenAiAdapter extends BaseAdapter {
     );
   }
 
-  protected override isStreamComplete(
-    data: Record<string, unknown>,
-    event: EventSourceMessage,
-  ): boolean {
-    if (this.config.protocol !== 'openai-responses') return false;
+  protected override isStreamComplete(data: Record<string, unknown>): boolean {
     if (
-      event.event !== 'response.completed' &&
+      this.config.protocol !== 'openai-responses' ||
       data.type !== 'response.completed'
     ) {
       return false;
@@ -141,17 +128,16 @@ export class OpenAiAdapter extends BaseAdapter {
     return body;
   }
 
-  public getTextGenerationUrl(): string {
-    return this.config.endpoint;
-  }
-
   public parseResponse(response: HttpResponse<unknown>): string {
     if (this.config.protocol === 'openai-chat-completions') {
-      const data = response.data as {
+      const data = response.data as Record<string, unknown> & {
         choices?: Array<{ message?: { content?: string } }>;
       };
+      const finishError = this.createFinishError(data);
+      if (finishError) throw finishError;
+
       const content = data.choices?.[0]?.message?.content;
-      if (typeof content === 'string' && content) return content.trim();
+      if (typeof content === 'string' && content) return content;
       throw new Error('Chat Completions API returned no text');
     }
 
@@ -164,11 +150,7 @@ export class OpenAiAdapter extends BaseAdapter {
         type?: string;
         content?: Array<{ type?: string; text?: string }>;
       }>;
-      output_text?: string;
     };
-    if (typeof data.output_text === 'string' && data.output_text) {
-      return data.output_text.trim();
-    }
 
     let text = '';
     for (const item of data.output || []) {
@@ -177,7 +159,7 @@ export class OpenAiAdapter extends BaseAdapter {
         if (content.type === 'output_text') text += content.text || '';
       }
     }
-    if (text) return text.trim();
+    if (text) return text;
     throw new Error('Responses API returned no text');
   }
 
@@ -202,11 +184,7 @@ export class OpenAiAdapter extends BaseAdapter {
       },
       completion,
       (response) => {
-        const data = response.data as {
-          data?: unknown[];
-          object?: string;
-        };
-        if (Array.isArray(data.data) || data.object === 'list') return;
+        if (Array.isArray((response.data as { data?: unknown }).data)) return;
         throw {
           type: 'api',
           message: 'Models API returned an unexpected response',
@@ -253,6 +231,22 @@ export class OpenAiAdapter extends BaseAdapter {
       | Array<{ delta?: { content?: string } }>
       | undefined;
     return choices?.[0]?.delta?.content ?? null;
+  }
+
+  private createFinishError(
+    data: Record<string, unknown>,
+    troubleshootingLink?: string,
+  ): ServiceError | null {
+    const choices = data.choices as
+      | Array<{ finish_reason?: unknown }>
+      | undefined;
+    const reason = choices?.[0]?.finish_reason;
+    if (reason !== 'length' && reason !== 'content_filter') return null;
+    return {
+      type: 'api',
+      message: `API 响应未完成：${reason}`,
+      ...(troubleshootingLink ? { troubleshootingLink } : {}),
+    };
   }
 
   private createApiError(

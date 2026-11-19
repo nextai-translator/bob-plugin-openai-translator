@@ -30,7 +30,7 @@ Use these defaults until a concrete user need or provider contract justifies rev
 
 - Isolate provider wire differences while sharing the Bob request lifecycle. Direct adapters are preferred at the current scale; reconsider SDKs or a broader provider abstraction only when they reduce demonstrated complexity and remain compatible with JavaScriptCore.
 - Add model controls from current official provider evidence. For unknown models and partially compatible APIs, omit optional controls rather than infer support.
-- A configured non-Azure API URL currently uses an OpenAI-compatible wire format. Verified official MiniMax hosts keep the MiniMax codec because their stream semantics differ. Supporting another native-provider proxy format is a product choice, not a URL-detection shortcut.
+- A configured API URL selects its wire format and authentication header from its ending: `/chat/completions`, `/messages`, `/models`, or `/responses`. Official MiniMax hosts keep the MiniMax adapter because their request contract differs. Do not guess a format from the host, and do not add per-gateway authentication or header variants; a service that departs from the native contract of its ending is outside the plugin's scope.
 - Validate compatible services with a small generation request because `/models` is not a reliable cross-service contract.
 - Preserve a real SSE parser: line splitting does not handle arbitrary chunk boundaries or multiline events.
 - Evaluate performance through local selection, request construction, parsing, and bundle size. Network latency does not establish an architecture improvement.

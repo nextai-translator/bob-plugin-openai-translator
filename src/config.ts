@@ -6,15 +6,17 @@ import type {
   ReasoningMode,
   ServiceProvider,
 } from './types';
-import {
-  DEFAULT_MODEL,
-  getCatalogModelProvider,
-} from './utils/model-capabilities';
+import { DEFAULT_MODEL } from './utils/model-capabilities';
 
 export const CONFIGURATION_GUIDE_URL =
   'https://github.com/nextai-translator/bob-plugin-openai-translator/blob/main/docs/configuration_manual_CN.md';
 
-export const PROVIDERS = Object.freeze({
+export const PROVIDERS = {
+  anthropic: {
+    defaultEndpoint: 'https://api.anthropic.com/v1/messages',
+    documentationUrl: 'https://platform.claude.com/docs/en/api/overview',
+    protocol: 'anthropic-messages',
+  },
   'azure-openai': {
     defaultEndpoint: '',
     documentationUrl:
@@ -42,7 +44,7 @@ export const PROVIDERS = Object.freeze({
     documentationUrl: CONFIGURATION_GUIDE_URL,
     protocol: 'openai-responses',
   },
-} satisfies Record<ServiceProvider, ProviderDefinition>);
+} satisfies Record<ServiceProvider, ProviderDefinition>;
 
 const createConfigError = (
   message: string,
@@ -67,20 +69,23 @@ const normalizeEndpoint = (value: string): string => {
       '请填写以 http:// 或 https:// 开头的完整请求地址。',
     );
   }
-  return endpoint;
+  return endpoint.replace(/\/+(?=\?|$)/, '');
 };
 
-export const detectOpenAiProtocol = (endpoint: string): ApiProtocol => {
-  const path = endpoint.split('?')[0].replace(/\/+$/, '');
-  if (path.endsWith('/chat/completions')) {
-    return 'openai-chat-completions';
-  }
-  if (path.endsWith('/responses')) {
-    return 'openai-responses';
-  }
+const PROTOCOL_SUFFIXES: ReadonlyArray<readonly [string, ApiProtocol]> = [
+  ['/chat/completions', 'openai-chat-completions'],
+  ['/messages', 'anthropic-messages'],
+  ['/models', 'gemini-generate-content'],
+  ['/responses', 'openai-responses'],
+];
+
+const detectProtocol = (endpoint: string): ApiProtocol => {
+  const path = endpoint.split('?')[0];
+  const match = PROTOCOL_SUFFIXES.find(([suffix]) => path.endsWith(suffix));
+  if (match) return match[1];
   throw createConfigError(
-    '配置错误：API URL 格式不正确',
-    '完整地址必须以 /responses 或 /chat/completions 结尾。',
+    '配置错误：API URL 须以 /chat/completions、/messages、/models 或 /responses 结尾',
+    '请填写完整的请求地址，而不是服务的 Base URL。',
   );
 };
 
@@ -105,7 +110,7 @@ const parseModel = (selectedModel: string, customModel: string): string => {
   if (!model) {
     throw createConfigError(
       '配置错误：请填写自定义模型',
-      '选择 Custom model 后，模型名称不能为空。',
+      '选择「自定义模型」后，模型名称不能为空。',
     );
   }
   return model;
@@ -117,7 +122,7 @@ const parseReasoningMode = (value: string): ReasoningMode => {
   }
   throw createConfigError(
     '配置错误：未知推理模式',
-    `不支持的推理模式：${value || '(empty)'}`,
+    `不支持的推理模式：${value}`,
   );
 };
 
@@ -126,26 +131,39 @@ const parseStream = (value: string): boolean => {
   if (value === 'disable') return false;
   throw createConfigError(
     '配置错误：未知流式输出设置',
-    `不支持的流式输出设置：${value || '(empty)'}`,
+    `不支持的流式输出设置：${value}`,
   );
 };
 
 const inferOfficialProvider = (model: string): ServiceProvider => {
-  const catalogProvider = getCatalogModelProvider(model);
-  if (catalogProvider) return catalogProvider;
+  if (model.startsWith('claude-')) return 'anthropic';
   if (model.startsWith('gemini-')) return 'gemini';
   if (model.startsWith('MiniMax-')) return 'minimax';
   return 'openai';
 };
 
+// `/openai/v1` alone is not Azure: other services serve Bearer-authenticated APIs there.
 const isAzureEndpoint = (endpoint: string): boolean =>
-  /^https?:\/\/[^/]+\.openai\.azure\.com(?:\/|$)/i.test(endpoint) ||
-  /\/openai\/(?:v1|deployments\/)/i.test(endpoint);
+  /^https?:\/\/[^/?]+\.(?:cognitiveservices|openai|services\.ai)\.azure\.com(?::\d+)?(?:[/?]|$)/i.test(
+    endpoint,
+  ) || /^[^?]*\/openai\/deployments\//i.test(endpoint);
 
 const isMiniMaxEndpoint = (endpoint: string): boolean =>
   /^https?:\/\/api\.(?:minimax\.io|minimaxi\.com)(?::\d+)?(?:\/|$)/i.test(
     endpoint,
   );
+
+const deriveCustomProvider = (
+  endpoint: string,
+  protocol: ApiProtocol,
+): ServiceProvider => {
+  if (protocol === 'anthropic-messages') return 'anthropic';
+  if (protocol === 'gemini-generate-content') return 'gemini';
+  if (isAzureEndpoint(endpoint)) return 'azure-openai';
+  return isMiniMaxEndpoint(endpoint) && protocol === 'openai-chat-completions'
+    ? 'minimax'
+    : 'openai-compatible';
+};
 
 export const parseOptions = (
   options: Readonly<Record<string, string>>,
@@ -156,15 +174,10 @@ export const parseOptions = (
   );
   const configuredEndpoint = normalizeEndpoint(options.apiUrl || '');
   const configuredProtocol = configuredEndpoint
-    ? detectOpenAiProtocol(configuredEndpoint)
+    ? detectProtocol(configuredEndpoint)
     : undefined;
-  const provider = configuredEndpoint
-    ? isAzureEndpoint(configuredEndpoint)
-      ? 'azure-openai'
-      : isMiniMaxEndpoint(configuredEndpoint) &&
-          configuredProtocol === 'openai-chat-completions'
-        ? 'minimax'
-        : 'openai-compatible'
+  const provider = configuredProtocol
+    ? deriveCustomProvider(configuredEndpoint, configuredProtocol)
     : inferOfficialProvider(model);
   const definition = PROVIDERS[provider];
   const endpoint = configuredEndpoint || definition.defaultEndpoint;

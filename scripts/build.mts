@@ -14,7 +14,7 @@ async function build() {
   await rm(distDir, { recursive: true, force: true });
   await mkdir(distDir, { recursive: true });
 
-  const result = await Bun.build({
+  await Bun.build({
     entrypoints: [path.join(srcDir, 'main.ts')],
     outdir: distDir,
     target: 'browser',
@@ -22,9 +22,6 @@ async function build() {
     minify: true,
     naming: '[name].js',
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, 'Plugin bundle failed');
-  }
 
   console.log('Copying public files...');
   for (const file of await readdir(publicDir)) {

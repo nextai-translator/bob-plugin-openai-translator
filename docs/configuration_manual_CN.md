@@ -8,7 +8,7 @@
 2. 填写 OpenAI API Key。
 3. 保存配置并开始翻译。
 
-使用 Gemini 或 MiniMax 官方 API 时，选择对应模型。使用第三方 API 服务时，按其文档填写模型和完整 API URL。
+使用 Claude、Gemini 或 MiniMax 官方 API 时，选择对应模型并填写该服务的 API Key。使用第三方 API 服务时，按其文档填写模型和完整 API URL。
 
 ## API Key
 
@@ -18,19 +18,22 @@ Key 只会发送到最终使用的 API URL。插件不会记录 Key 或请求头
 
 ## 模型
 
-默认模型为 `gpt-5.6-luna`。内置模型包括：
+默认模型为 `gpt-6-luna`。内置模型包括：
 
+- `claude-haiku-5-5`
+- `claude-sonnet-5-5`
 - `gemini-3.5-flash-lite`
-- `gemini-3.6-flash`
-- `gpt-5.4-mini`
-- `gpt-5.6-luna`
-- `MiniMax-M2.7-highspeed`
+- `gemini-4-hydrogen`
+- `gpt-6-luna`
+- `gpt-6.1-terra`
 - `MiniMax-M3`
+- `MiniMax-M3.1-Flash`
 
 API URL 留空时，插件按模型自动选择官方 API：
 
 | 模型 | 使用的官方 API |
 | --- | --- |
+| `claude-*` | Claude Messages API |
 | `gemini-*` | Gemini GenerateContent API |
 | `gpt-*` 或其他模型 | OpenAI Responses API |
 | `MiniMax-*` | MiniMax Chat Completions API |
@@ -41,24 +44,39 @@ API URL 留空时，插件按模型自动选择官方 API：
 
 API URL 可留空。留空时使用模型对应的官方地址。
 
-使用第三方 API 服务时填写完整请求 URL。当前支持 OpenAI 兼容 API 和 Azure OpenAI，地址必须以 `/responses` 或 `/chat/completions` 结尾。插件根据这个结尾选择请求格式。
+使用第三方 API 服务时填写完整请求 URL。插件根据地址结尾选择请求格式和认证请求头：
+
+| 地址结尾 | 请求格式 | 认证请求头 |
+| --- | --- | --- |
+| `/chat/completions` | OpenAI Chat Completions | `Authorization: Bearer` |
+| `/messages` | Claude Messages | `x-api-key` |
+| `/models` | Gemini GenerateContent | `x-goog-api-key` |
+| `/responses` | OpenAI Responses | `Authorization: Bearer` |
+
+Gemini 格式的地址填到 `/models` 为止，插件会补上模型和操作名。
 
 常见示例：
 
 - Azure OpenAI：`https://RESOURCE_NAME.openai.azure.com/openai/v1/responses`
+- Claude 格式的中转服务：`https://gateway.example.com/v1/messages`
 - Cloudflare AI Gateway：`https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1/chat/completions`
+- Gemini 格式的中转服务：`https://gateway.example.com/v1beta/models`
 - MiniMax 中国区：`https://api.minimaxi.com/v1/chat/completions`
 - OpenAI 兼容 API：`https://gateway.example.com/v1/responses`
 - OpenRouter：`https://openrouter.ai/api/v1/chat/completions`
 - Vercel AI Gateway：`https://ai-gateway.vercel.sh/v1/chat/completions`
 
-填写 API URL 后，普通地址使用 Bearer Token。`*.openai.azure.com` 地址以及包含 `/openai/v1` 或 `/openai/deployments/` 的 Azure 路径会自动使用 `api-key` 请求头。
+地址以 `/chat/completions` 或 `/responses` 结尾时，Azure 主机（`*.openai.azure.com`、`*.cognitiveservices.azure.com`、`*.services.ai.azure.com`）以及包含 `/openai/deployments/` 的路径会改用 `api-key` 请求头。
 
 ## 流式输出
 
 默认开启，译文会随模型生成逐步显示。关闭后会等待完整结果再显示。
 
-两种模式都会响应 Bob 的取消操作。流式响应格式错误、API 错误或空结果都会作为失败返回，不会产生空白的成功结果。
+两种模式都会响应 Bob 的取消操作。流式响应格式错误、API 错误、空结果以及未生成完就中止的响应都会作为失败返回，不会产生空白或不完整的成功结果。
+
+## 译文格式
+
+译文以 Markdown 格式交给 Bob。Bob 1.21.0 及以上版本在 macOS 13 及以上系统会渲染标题、列表、代码块等格式，可在 Bob 的「偏好设置 - 翻译 - Markdown」中关闭；更早的版本按纯文本显示。
 
 ## 推理
 
@@ -100,9 +118,10 @@ $text
 ## 排错
 
 - 只填 API Key 仍验证失败：确认它是有效的 OpenAI Key，并可访问默认模型。
-- 使用 Gemini 或 MiniMax 全球 API：选择对应模型，不要填写 API URL；MiniMax 中国区使用上面的中国区地址。
+- 使用 Claude、Gemini 或 MiniMax 全球 API：选择对应模型，不要填写 API URL；MiniMax 中国区使用上面的中国区地址。
 - 使用 OpenAI 兼容 API：确认模型 ID 与服务文档一致，并填写完整 API URL。
-- `API URL 格式不正确`：检查地址是否以 `/responses` 或 `/chat/completions` 结尾。
+- `API URL 格式不正确`：检查地址是否以 [API URL](#api-url) 中列出的结尾之一结束。
+- `API 响应未完成：max_tokens`、`length` 或 `MAX_TOKENS`：模型的推理和译文合计超过了单次输出上限，缩短原文或将「推理」设为关闭后重试。
 - Azure OpenAI：自定义模型填写部署名，API URL 使用 `*.openai.azure.com` 的完整请求地址。
 - 翻译接口不支持推理参数：将「推理」改为「默认」。
 
@@ -110,6 +129,7 @@ $text
 
 - [Azure OpenAI Responses API](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses)
 - [Bob 插件文档](https://bobtranslate.com/plugin/)
+- [Claude API](https://platform.claude.com/docs/en/api/overview)
 - [Cloudflare AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
 - [Gemini API](https://ai.google.dev/gemini-api/docs)
 - [MiniMax OpenAI-compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)

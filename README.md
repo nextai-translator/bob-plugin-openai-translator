@@ -4,7 +4,7 @@
 
 # OpenAI Translator for Bob
 
-使用 OpenAI、Google Gemini、MiniMax 或 OpenAI 兼容 API 进行翻译、润色和语法修正的 [Bob](https://bobtranslate.com/) 插件。
+使用 OpenAI、Claude、Google Gemini、MiniMax 或 OpenAI 兼容 API 进行翻译、润色和语法修正的 [Bob](https://bobtranslate.com/) 插件。
 
 默认配置使用 OpenAI。安装后填写 API Key 即可开始翻译，其他选项按需修改。
 
@@ -17,7 +17,7 @@
 
 ## 配置
 
-使用 Gemini 或 MiniMax 时，在[模型](./docs/configuration_manual_CN.md#模型)中选择对应选项；使用第三方 API 服务时，按其文档填写[模型](./docs/configuration_manual_CN.md#模型)和完整 [API URL](./docs/configuration_manual_CN.md#api-url)。
+使用 Claude、Gemini 或 MiniMax 时，在[模型](./docs/configuration_manual_CN.md#模型)中选择对应选项；使用第三方 API 服务时，按其文档填写[模型](./docs/configuration_manual_CN.md#模型)和完整 [API URL](./docs/configuration_manual_CN.md#api-url)。
 
 [推理](./docs/configuration_manual_CN.md#推理)、[系统指令和用户指令](./docs/configuration_manual_CN.md#系统指令和用户指令)等设置见配置手册。
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { TextTranslateQuery } from '@bob-translate/types';
+import { AnthropicAdapter } from '../anthropic';
 import { AzureOpenAiAdapter } from '../azure-openai';
 import { GeminiAdapter } from '../gemini';
 import { getServiceAdapter } from '../index';
@@ -37,7 +38,7 @@ describe('provider dispatch', () => {
     expect(
       getServiceAdapter(
         createTestConfig({
-          model: 'gemini-3.6-flash',
+          model: 'gemini-4-hydrogen',
         }),
       ),
     ).toBeInstanceOf(GeminiAdapter);
@@ -58,7 +59,7 @@ describe('OpenAI protocol codec', () => {
       'Content-Type': 'application/json',
       Authorization: 'Bearer key',
     });
-    expect(body.model).toBe('gpt-5.6-luna');
+    expect(body.model).toBe('gpt-6-luna');
     expect(body.stream).toBe(true);
     expect(body.reasoning).toBeUndefined();
     expect(body.temperature).toBeUndefined();
@@ -115,9 +116,24 @@ describe('OpenAI protocol codec', () => {
     );
     expect(
       chat.parseResponse({
-        data: { choices: [{ message: { content: '  你好  ' } }] },
+        data: { choices: [{ message: { content: '    你好\n' } }] },
       } as never),
-    ).toBe('你好');
+    ).toBe('    你好\n');
+  });
+
+  it('rejects a Chat Completions response cut off at the output limit', () => {
+    const chat = new OpenAiAdapter(
+      createTestConfig({
+        apiUrl: 'https://gateway.example/v1/chat/completions',
+      }),
+    );
+    expect(() =>
+      chat.parseResponse({
+        data: {
+          choices: [{ finish_reason: 'length', message: { content: '你' } }],
+        },
+      } as never),
+    ).toThrow(expect.objectContaining({ message: 'API 响应未完成：length' }));
   });
 
   it('rejects incomplete Responses output instead of returning partial text', () => {
@@ -162,29 +178,120 @@ describe('Azure OpenAI codec', () => {
   });
 });
 
+describe('Anthropic codec', () => {
+  it('builds a Messages request with the required output cap', () => {
+    const adapter = new AnthropicAdapter(
+      createTestConfig({ model: 'claude-haiku-5-5' }),
+    );
+    const body = adapter.buildRequestBody(query);
+
+    expect(
+      getServiceAdapter(createTestConfig({ model: 'claude-haiku-5-5' })),
+    ).toBeInstanceOf(AnthropicAdapter);
+    expect(adapter.getTextGenerationUrl()).toBe(
+      'https://api.anthropic.com/v1/messages',
+    );
+    expect(adapter.buildHeaders('key')).toMatchObject({
+      'anthropic-version': '2026-10-21',
+      'x-api-key': 'key',
+    });
+    expect(body).toMatchObject({
+      max_tokens: 32000,
+      messages: [{ role: 'user', content: 'Hello' }],
+      model: 'claude-haiku-5-5',
+      stream: true,
+    });
+    expect(body.system).toContain('translation engine');
+    expect(body.thinking).toBeUndefined();
+    expect(body.output_config).toBeUndefined();
+    expect(body.temperature).toBeUndefined();
+  });
+
+  it('maps reasoning off to the lowest setting each model accepts', () => {
+    const bodyFor = (model: string) =>
+      new AnthropicAdapter(
+        createTestConfig({
+          customModel: model,
+          model: 'custom',
+          reasoningMode: 'disable',
+        }),
+      ).buildRequestBody(query);
+
+    expect(bodyFor('claude-haiku-5-5').thinking).toEqual({ type: 'disabled' });
+    expect(bodyFor('claude-sonnet-5-5').thinking).toEqual({
+      type: 'between_tools',
+    });
+    expect(bodyFor('claude-opus-5-5')).toMatchObject({
+      output_config: { effort: 'low' },
+    });
+    expect(bodyFor('claude-opus-5-5').thinking).toBeUndefined();
+    expect(bodyFor('claude-unknown').thinking).toBeUndefined();
+    expect(bodyFor('claude-unknown').output_config).toBeUndefined();
+  });
+
+  it('joins text blocks, skips thinking, and rejects truncated output', () => {
+    const adapter = new AnthropicAdapter(
+      createTestConfig({ model: 'claude-haiku-5-5' }),
+    );
+    expect(
+      adapter.parseResponse({
+        data: {
+          content: [
+            { type: 'thinking', thinking: 'hmm' },
+            { type: 'text', text: '你' },
+            { type: 'text', text: '好' },
+          ],
+          stop_reason: 'end_turn',
+        },
+      } as never),
+    ).toBe('你好');
+    expect(() =>
+      adapter.parseResponse({
+        data: {
+          content: [{ type: 'text', text: '你' }],
+          stop_reason: 'max_tokens',
+        },
+      } as never),
+    ).toThrow();
+  });
+});
+
 describe('Gemini codec', () => {
   it('uses native GenerateContent and model defaults without temperature', () => {
     const adapter = new GeminiAdapter(
       createTestConfig({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-4-hydrogen',
       }),
     );
     const body = adapter.buildRequestBody(query);
     expect(adapter.getTextGenerationUrl()).toBe(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:streamGenerateContent?alt=sse',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-hydrogen:streamGenerateContent?alt=sse',
     );
     expect(adapter.buildHeaders('key')['x-goog-api-key']).toBe('key');
     expect(body.generationConfig).toBeUndefined();
 
     const disabled = new GeminiAdapter(
       createTestConfig({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-4-hydrogen',
         reasoningMode: 'disable',
       }),
     );
     expect(disabled.buildRequestBody(query).generationConfig).toEqual({
-      thinkingConfig: { thinkingLevel: 'minimal' },
+      thinkingConfig: { thinkingLevel: 'low' },
     });
+  });
+
+  it('appends the model operation to a configured models URL', () => {
+    const adapter = new GeminiAdapter(
+      createTestConfig({
+        apiUrl: 'https://relay.example/v1beta/models',
+        model: 'gemini-4-hydrogen',
+        stream: 'disable',
+      }),
+    );
+    expect(adapter.getTextGenerationUrl()).toBe(
+      'https://relay.example/v1beta/models/gemini-4-hydrogen:generateContent',
+    );
   });
 
   it('concatenates all returned text parts', () => {
@@ -229,5 +336,69 @@ describe('MiniMax codec', () => {
     expect(disabled.buildRequestBody(query).thinking).toEqual({
       type: 'disabled',
     });
+  });
+});
+
+describe('unfinished native responses', () => {
+  it('rejects a Claude response that stopped for any reason other than completion', () => {
+    const adapter = new AnthropicAdapter(
+      createTestConfig({ model: 'claude-haiku-5-5' }),
+    );
+    for (const stopReason of [
+      'max_tokens',
+      'model_context_window_exceeded',
+      'refusal',
+    ]) {
+      expect(() =>
+        adapter.parseResponse({
+          data: {
+            type: 'message',
+            content: [{ type: 'text', text: 'partial' }],
+            stop_reason: stopReason,
+          },
+        } as never),
+      ).toThrow(
+        expect.objectContaining({ message: `API 响应未完成：${stopReason}` }),
+      );
+    }
+  });
+
+  it('rejects a Gemini response that did not finish with STOP', () => {
+    const adapter = new GeminiAdapter(
+      createTestConfig({ model: 'gemini-4-hydrogen' }),
+    );
+    expect(() =>
+      adapter.parseResponse({
+        data: {
+          candidates: [
+            {
+              content: { parts: [{ text: 'partial' }] },
+              finishReason: 'MAX_TOKENS',
+            },
+          ],
+        },
+      } as never),
+    ).toThrow(
+      expect.objectContaining({ message: 'API 响应未完成：MAX_TOKENS' }),
+    );
+  });
+});
+
+describe('Gemini operation URL', () => {
+  it('inserts the model operation before a configured query string', () => {
+    const create = (stream: string) =>
+      new GeminiAdapter(
+        createTestConfig({
+          apiUrl: 'https://gateway.example/v1beta/models/?tenant=a',
+          model: 'gemini-4-hydrogen',
+          stream,
+        }),
+      );
+    expect(create('disable').getTextGenerationUrl()).toBe(
+      'https://gateway.example/v1beta/models/gemini-4-hydrogen:generateContent?tenant=a',
+    );
+    expect(create('enable').getTextGenerationUrl()).toBe(
+      'https://gateway.example/v1beta/models/gemini-4-hydrogen:streamGenerateContent?tenant=a&alt=sse',
+    );
   });
 });

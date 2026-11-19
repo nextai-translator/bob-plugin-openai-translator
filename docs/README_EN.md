@@ -4,7 +4,7 @@
 
 # OpenAI Translator for Bob
 
-Translate, polish, and correct grammar in [Bob](https://bobtranslate.com/) with OpenAI, Google Gemini, MiniMax, or an OpenAI-compatible API.
+Translate, polish, and correct grammar in [Bob](https://bobtranslate.com/) with OpenAI, Claude, Google Gemini, MiniMax, or an OpenAI-compatible API.
 
 The default configuration uses OpenAI. Enter an API key after installation and start translating; change the other settings only when needed.
 
@@ -17,7 +17,7 @@ The default configuration uses OpenAI. Enter an API key after installation and s
 
 ## Configuration
 
-For Gemini or MiniMax, select the corresponding [model](./configuration_manual_EN.md#model). For a third-party API service, enter the [model](./configuration_manual_EN.md#model) and full [API URL](./configuration_manual_EN.md#api-url) specified by the service.
+For Claude, Gemini, or MiniMax, select the corresponding [model](./configuration_manual_EN.md#model). For a third-party API service, enter the [model](./configuration_manual_EN.md#model) and full [API URL](./configuration_manual_EN.md#api-url) specified by the service.
 
 See the configuration manual for [reasoning](./configuration_manual_EN.md#reasoning) and [system and user prompts](./configuration_manual_EN.md#system-and-user-prompts).
 
