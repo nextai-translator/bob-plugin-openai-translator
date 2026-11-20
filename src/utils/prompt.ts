@@ -11,11 +11,13 @@ export const createPrompts = (
   query: TextTranslateQuery,
   config: PluginConfig,
 ): { system: string; user: string } => {
-  // A random tag per request keeps source text that mentions the tag from
-  // closing its own boundary.
-  const tagName = `source_text_${Math.floor(Math.random() * 36 ** 6)
-    .toString(36)
-    .padStart(6, '0')}`;
+  // Deriving the tag from the source text keeps a repeated request
+  // byte-identical, which a random tag would not, so providers and gateways
+  // can still cache it.
+  let tagName = 'source_text';
+  for (let suffix = 2; query.text.includes(tagName); suffix++) {
+    tagName = `source_text_${suffix}`;
+  }
   const values: Record<string, string> = {
     sourceLang: langMap.get(query.detectFrom) || query.detectFrom,
     sourceTag: `<${tagName}>`,
