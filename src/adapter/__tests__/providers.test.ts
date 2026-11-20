@@ -64,7 +64,7 @@ describe('OpenAI protocol codec', () => {
     expect(body.reasoning).toBeUndefined();
     expect(body.temperature).toBeUndefined();
     expect(body.instructions).toBeString();
-    expect(body.input).toBe('<source_text>Hello</source_text>');
+    expect(body.input).toBe('<__source_text__>Hello</__source_text__>');
 
     const disabled = new OpenAiAdapter(
       createTestConfig({ reasoningMode: 'disable' }),
@@ -85,7 +85,7 @@ describe('OpenAI protocol codec', () => {
     const body = adapter.buildRequestBody(query);
     expect(body.messages).toMatchObject([
       { role: 'system' },
-      { role: 'user', content: '<source_text>Hello</source_text>' },
+      { role: 'user', content: '<__source_text__>Hello</__source_text__>' },
     ]);
     expect(body.instructions).toBeUndefined();
     expect(body.reasoning_effort).toBeUndefined();
@@ -200,7 +200,9 @@ describe('Anthropic codec', () => {
     });
     expect(body).toMatchObject({
       max_tokens: 32000,
-      messages: [{ role: 'user', content: '<source_text>Hello</source_text>' }],
+      messages: [
+        { role: 'user', content: '<__source_text__>Hello</__source_text__>' },
+      ],
       model: 'claude-haiku-5-5',
       stream: true,
     });
@@ -272,7 +274,7 @@ describe('Gemini codec', () => {
     );
     expect(adapter.buildHeaders('key')['x-goog-api-key']).toBe('key');
     expect(body.contents).toMatchObject([
-      { parts: [{ text: '<source_text>Hello</source_text>' }] },
+      { parts: [{ text: '<__source_text__>Hello</__source_text__>' }] },
     ]);
     expect(body.generationConfig).toBeUndefined();
 

@@ -14,9 +14,9 @@ export const createPrompts = (
   // Deriving the tag from the source text keeps a repeated request
   // byte-identical, which a random tag would not, so providers and gateways
   // can still cache it.
-  let tagName = 'source_text';
+  let tagName = '__source_text__';
   for (let suffix = 2; query.text.includes(tagName); suffix++) {
-    tagName = `source_text_${suffix}`;
+    tagName = `__source_text_${suffix}__`;
   }
   const values: Record<string, string> = {
     sourceLang: langMap.get(query.detectFrom) || query.detectFrom,
