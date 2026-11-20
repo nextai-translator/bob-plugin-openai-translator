@@ -19,7 +19,7 @@ The default configuration uses OpenAI. Enter an API key after installation and s
 
 For Claude, Gemini, or MiniMax, select the corresponding [model](./configuration_manual_EN.md#model). For a third-party API service, enter the [model](./configuration_manual_EN.md#model) and full [API URL](./configuration_manual_EN.md#api-url) specified by the service.
 
-See the configuration manual for [reasoning](./configuration_manual_EN.md#reasoning) and [system and user prompts](./configuration_manual_EN.md#system-and-user-prompts).
+See the configuration manual for [reasoning](./configuration_manual_EN.md#reasoning) and the [system prompt](./configuration_manual_EN.md#system-prompt).
 
 ## Features
 
@@ -27,7 +27,7 @@ See the configuration manual for [reasoning](./configuration_manual_EN.md#reason
 - Polish and correct grammar when source and target languages match.
 - Stream results by default and cancel in-flight requests.
 - Use the model's default reasoning behavior, or reduce it to the lowest supported setting.
-- Change the purpose with the system prompt and refine each request with the user prompt.
+- Change the purpose, terminology, tone, or format with the system prompt.
 
 ## Development and contributions
 

@@ -183,12 +183,10 @@ export const parseOptions = (
   const endpoint = configuredEndpoint || definition.defaultEndpoint;
   const protocol = configuredProtocol || definition.protocol;
   const customSystemPrompt = options.customSystemPrompt || '';
-  const customUserPrompt = options.customUserPrompt || '';
 
   const config: PluginConfig = {
     apiKeys: parseApiKeys(options.apiKeys || ''),
     customSystemPrompt: customSystemPrompt.trim() ? customSystemPrompt : '',
-    customUserPrompt: customUserPrompt.trim() ? customUserPrompt : '',
     endpoint,
     model,
     protocol,

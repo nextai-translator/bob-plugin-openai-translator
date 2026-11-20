@@ -63,8 +63,8 @@ describe('OpenAI protocol codec', () => {
     expect(body.stream).toBe(true);
     expect(body.reasoning).toBeUndefined();
     expect(body.temperature).toBeUndefined();
-    expect(body.instructions).toBeString();
-    expect(body.input).toBeString();
+    expect(body.instructions).toContain('<__source_text__> tags');
+    expect(body.input).toBe('<__source_text__>Hello</__source_text__>');
 
     const disabled = new OpenAiAdapter(
       createTestConfig({ reasoningMode: 'disable' }),
@@ -83,7 +83,13 @@ describe('OpenAI protocol codec', () => {
       }),
     );
     const body = adapter.buildRequestBody(query);
-    expect(body.messages).toBeArray();
+    expect(body.messages).toMatchObject([
+      {
+        role: 'system',
+        content: expect.stringContaining('<__source_text__> tags'),
+      },
+      { role: 'user', content: '<__source_text__>Hello</__source_text__>' },
+    ]);
     expect(body.instructions).toBeUndefined();
     expect(body.reasoning_effort).toBeUndefined();
     expect(body.temperature).toBeUndefined();
@@ -197,11 +203,13 @@ describe('Anthropic codec', () => {
     });
     expect(body).toMatchObject({
       max_tokens: 32000,
-      messages: [{ role: 'user', content: 'Hello' }],
+      messages: [
+        { role: 'user', content: '<__source_text__>Hello</__source_text__>' },
+      ],
       model: 'claude-haiku-5-5',
       stream: true,
     });
-    expect(body.system).toContain('translation engine');
+    expect(body.system).toContain('<__source_text__> tags');
     expect(body.thinking).toBeUndefined();
     expect(body.output_config).toBeUndefined();
     expect(body.temperature).toBeUndefined();
@@ -268,6 +276,17 @@ describe('Gemini codec', () => {
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-hydrogen:streamGenerateContent?alt=sse',
     );
     expect(adapter.buildHeaders('key')['x-goog-api-key']).toBe('key');
+    expect(body).toMatchObject({
+      system_instruction: {
+        parts: [{ text: expect.stringContaining('<__source_text__> tags') }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: '<__source_text__>Hello</__source_text__>' }],
+        },
+      ],
+    });
     expect(body.generationConfig).toBeUndefined();
 
     const disabled = new GeminiAdapter(
