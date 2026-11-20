@@ -93,6 +93,10 @@ describe('info.json consistency', () => {
   it('keeps the system prompt placeholder and highlighted variables', () => {
     const option = getOption('customSystemPrompt');
     expect(option.textConfig?.placeholderText).toBe(DEFAULT_SYSTEM_PROMPT);
-    expect(option.textConfig?.keyWords).toEqual(['$sourceLang', '$targetLang']);
+    expect(option.textConfig?.keyWords).toEqual([
+      '$sourceLang',
+      '$sourceTag',
+      '$targetLang',
+    ]);
   });
 });

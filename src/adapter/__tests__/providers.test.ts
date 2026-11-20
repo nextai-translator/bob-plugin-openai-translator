@@ -8,6 +8,8 @@ import { MiniMaxAdapter } from '../minimax';
 import { OpenAiAdapter } from '../openai';
 import { createTestConfig } from './fixtures';
 
+const TAGGED_HELLO = /^<(source_text_[0-9a-z]{6})>Hello<\/\1>$/;
+
 const query = {
   text: 'Hello',
   detectFrom: 'en',
@@ -64,7 +66,7 @@ describe('OpenAI protocol codec', () => {
     expect(body.reasoning).toBeUndefined();
     expect(body.temperature).toBeUndefined();
     expect(body.instructions).toBeString();
-    expect(body.input).toBe('<source_text>Hello</source_text>');
+    expect(body.input).toMatch(TAGGED_HELLO);
 
     const disabled = new OpenAiAdapter(
       createTestConfig({ reasoningMode: 'disable' }),
@@ -85,7 +87,7 @@ describe('OpenAI protocol codec', () => {
     const body = adapter.buildRequestBody(query);
     expect(body.messages).toMatchObject([
       { role: 'system' },
-      { role: 'user', content: '<source_text>Hello</source_text>' },
+      { role: 'user', content: expect.stringMatching(TAGGED_HELLO) },
     ]);
     expect(body.instructions).toBeUndefined();
     expect(body.reasoning_effort).toBeUndefined();
@@ -200,7 +202,9 @@ describe('Anthropic codec', () => {
     });
     expect(body).toMatchObject({
       max_tokens: 32000,
-      messages: [{ role: 'user', content: '<source_text>Hello</source_text>' }],
+      messages: [
+        { role: 'user', content: expect.stringMatching(TAGGED_HELLO) },
+      ],
       model: 'claude-haiku-5-5',
       stream: true,
     });
@@ -272,7 +276,7 @@ describe('Gemini codec', () => {
     );
     expect(adapter.buildHeaders('key')['x-goog-api-key']).toBe('key');
     expect(body.contents).toMatchObject([
-      { parts: [{ text: '<source_text>Hello</source_text>' }] },
+      { parts: [{ text: expect.stringMatching(TAGGED_HELLO) }] },
     ]);
     expect(body.generationConfig).toBeUndefined();
 
