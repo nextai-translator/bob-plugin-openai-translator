@@ -9,7 +9,6 @@ export const createTestConfig = (
     apiUrl: '',
     customModel: '',
     customSystemPrompt: '',
-    customUserPrompt: '',
     model: 'gpt-6-luna',
     reasoningMode: 'default',
     stream: 'enable',

@@ -37,8 +37,8 @@ The current configuration uses these decisions:
 - API URL is optional. Its ending (`/chat/completions`, `/messages`, `/models`, or `/responses`) selects the protocol and its authentication header without separate Base URL, path, or protocol fields. A Gemini URL stops at `/models` because the model and operation are path segments the adapter appends.
 - Temperature is absent from the UI and every request. Provider defaults avoid invalid parameters as model sampling contracts evolve.
 - Reasoning has two choices. Default sends no control. Disable maps to the lowest verified model-specific setting; models without a verified mapping receive no control.
-- Editable System Prompt and User Prompt defaults preserve their distinct roles: the system prompt defines purpose, while the user prompt shapes each input within that purpose. Both support `$text`, `$sourceLang`, and `$targetLang`.
-- The default system prompt starts with the translation role and explicitly prevents instruction-like source text from becoming a command. The raw source remains a separate user message.
+- The System Prompt is the only editable prompt and supports `$sourceLang` and `$targetLang`. The Claude and OpenAI prompting guides place rules in the system or developer message and the input in the user message; the Gemini guide also accepts rules at the start of the user prompt. Having no editable user prompt is a product choice: a second static template adds a setting, and editing it can drop the source delimiters.
+- The source is always sent as the user message inside `<source_text>` tags, and the default system prompt names those tags as the text to work on and states why: the source is content, not a message to the model. A bare source as the whole user turn reads as a request when it ends in a question or instruction, and a prohibition alone does not reliably keep a model from answering it. The same three guides recommend delimiters to separate instructions from supplied content. The default prompt carries no examples or emphatic wording, so it stays independent of language pair and model family.
 - Menu values are case-insensitively sorted by `value`; the `custom` model entry is the only fixed first item.
 
 ## Provider contracts
@@ -183,10 +183,12 @@ The option model compiled into Bob 1.22.0 has the same fields as the documented 
 - [Azure OpenAI Responses](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses)
 - [Claude API errors](https://platform.claude.com/docs/en/api/errors)
 - [Claude models](https://platform.claude.com/docs/en/about-claude/models/overview)
+- [Claude prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
 - [Claude streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
 - [Claude thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)
 - [Cloudflare AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
 - [Gemini models](https://aistudio.google.com/docs/models)
+- [Gemini prompting strategies](https://aistudio.google.com/docs/prompting-strategies)
 - [Gemini thinking](https://aistudio.google.com/docs/thinking.md?generate-content=true)
 - [MiniMax China OpenAI-compatible API](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)
 - [MiniMax OpenAI-compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)
@@ -206,6 +208,7 @@ The option model compiled into Bob 1.22.0 has the same fields as the documented 
 - Provider SDKs, `fetch`, browser streams, or Node.js runtime modules. Bundled for a browser target, `@anthropic-ai/sdk`, `openai`, `@google/genai`, and `@ai-sdk/anthropic` each exceed 350 KB minified and fail in bare JavaScriptCore on missing `Headers`, `Response`, `ReadableStream`, or `TransformStream`
 - Displaying model reasoning through `thinkInfo`, which adds a per-protocol delta codec without a translation use case
 - A global Temperature override
+- An editable user prompt. It could place instructions after the source, or carry them for a model that takes its instructions in the user message, such as Qwen-MT. Neither has a demonstrated need here, and the plugin always sends a system message
 - A dependency-injection container or generic protocol framework
 - Multiple separately published plugins solely to obtain provider-specific settings forms
 

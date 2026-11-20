@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import packageMetadata from '../../package.json';
 import info from '../../public/info.json';
 import { DEFAULT_MODEL, MODEL_CATALOG } from '../utils/model-capabilities';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT } from '../utils/prompt';
+import { DEFAULT_SYSTEM_PROMPT } from '../utils/prompt';
 
 type MenuOption = {
   defaultValue?: string;
@@ -62,9 +62,6 @@ describe('info.json consistency', () => {
     expect(getOption('customSystemPrompt').defaultValue).toBe(
       DEFAULT_SYSTEM_PROMPT,
     );
-    expect(getOption('customUserPrompt').defaultValue).toBe(
-      DEFAULT_USER_PROMPT,
-    );
     expect(info.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(packageMetadata.version).toBe(info.version);
   });
@@ -93,18 +90,9 @@ describe('info.json consistency', () => {
     }
   });
 
-  it('keeps prompt defaults, placeholders, and highlighted variables', () => {
-    for (const identifier of ['customSystemPrompt', 'customUserPrompt']) {
-      const option = getOption(identifier);
-      expect(option.defaultValue).toBeString();
-      expect(option.textConfig?.placeholderText).toBe(
-        option.defaultValue ?? '',
-      );
-      expect(option.textConfig?.keyWords).toEqual([
-        '$text',
-        '$sourceLang',
-        '$targetLang',
-      ]);
-    }
+  it('keeps the system prompt placeholder and highlighted variables', () => {
+    const option = getOption('customSystemPrompt');
+    expect(option.textConfig?.placeholderText).toBe(DEFAULT_SYSTEM_PROMPT);
+    expect(option.textConfig?.keyWords).toEqual(['$sourceLang', '$targetLang']);
   });
 });

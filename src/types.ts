@@ -23,7 +23,6 @@ export type ReasoningMode = 'default' | 'disable';
 export interface PluginConfig {
   readonly apiKeys: readonly string[];
   readonly customSystemPrompt: string;
-  readonly customUserPrompt: string;
   readonly endpoint: string;
   readonly model: string;
   readonly protocol: ApiProtocol;

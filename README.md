@@ -19,7 +19,7 @@
 
 使用 Claude、Gemini 或 MiniMax 时，在[模型](./docs/configuration_manual_CN.md#模型)中选择对应选项；使用第三方 API 服务时，按其文档填写[模型](./docs/configuration_manual_CN.md#模型)和完整 [API URL](./docs/configuration_manual_CN.md#api-url)。
 
-[推理](./docs/configuration_manual_CN.md#推理)、[系统指令和用户指令](./docs/configuration_manual_CN.md#系统指令和用户指令)等设置见配置手册。
+[推理](./docs/configuration_manual_CN.md#推理)、[系统指令](./docs/configuration_manual_CN.md#系统指令)等设置见配置手册。
 
 ## 功能
 
@@ -27,7 +27,7 @@
 - 源语言与目标语言相同时，自动进行润色和语法修正。
 - 默认启用流式输出，并支持取消请求。
 - 默认使用模型自身的推理设置，也可降至模型支持的最低档位。
-- 系统指令可改变用途，用户指令可调整每次请求的术语、语气或格式。
+- 系统指令可改变用途，并调整术语、语气或格式。
 
 ## 开发与贡献
 
