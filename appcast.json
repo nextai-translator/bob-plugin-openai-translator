@@ -2,6 +2,14 @@
   "identifier": "yetone.openai.translator",
   "versions": [
     {
+      "version": "5.2.0",
+      "desc": "原文放入标记后发送，减少提问或请求类原文被回答而不是翻译的情况；移除用户指令设置，系统指令新增 $sourceTag 变量",
+      "sha256": "ff4b834ca43a5f2689f59bdd1de658f36516e360340b63dab3090fbcb3922c4a",
+      "url": "https://github.com/nextai-translator/bob-plugin-openai-translator/releases/download/v5.2.0/openai-translator-5.2.0.bobplugin",
+      "minBobVersion": "1.8.0",
+      "timestamp": 1795187596440
+    },
+    {
       "version": "5.1.0",
       "desc": "支持 Claude 模型与 Anthropic Messages API，译文支持 Markdown 渲染，更新模型列表，修复 Gemini、MiniMax 与 Azure 请求处理",
       "sha256": "b6cd4d5e65d9bbc11c88c0774a5c47da7a5718bb9ea4b7a279bd268ac0a6f04b",
