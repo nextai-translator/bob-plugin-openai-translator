@@ -208,7 +208,7 @@ The option model compiled into Bob 1.22.0 has the same fields as the documented 
 - Provider SDKs, `fetch`, browser streams, or Node.js runtime modules. Bundled for a browser target, `@anthropic-ai/sdk`, `openai`, `@google/genai`, and `@ai-sdk/anthropic` each exceed 350 KB minified and fail in bare JavaScriptCore on missing `Headers`, `Response`, `ReadableStream`, or `TransformStream`
 - Displaying model reasoning through `thinkInfo`, which adds a per-protocol delta codec without a translation use case
 - A global Temperature override
-- An editable user prompt. It could place instructions after the source, or carry them for a model that takes its instructions in the user message, such as Qwen-MT. Neither has a demonstrated need here, and the plugin always sends a system message
+- An editable user prompt. It could place instructions after the source, or carry them for a model that rejects a system message. Neither has a demonstrated need here, and every translation request carries a system message
 - A dependency-injection container or generic protocol framework
 - Multiple separately published plugins solely to obtain provider-specific settings forms
 
