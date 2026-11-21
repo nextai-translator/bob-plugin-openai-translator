@@ -2,6 +2,14 @@
   "identifier": "yetone.openai.translator",
   "versions": [
     {
+      "version": "5.2.2",
+      "desc": "修复部分模型把原文译成其他语言、回答原文或原样返回的问题；系统指令中的 $targetLang 现在替换为语言代码加该语言自己的名称，例如 zh-CN (简体中文)，已保存的自定义指令同样生效",
+      "sha256": "079406d39158a471956871a205befbe8fbd53f49552925e15d906f65ddd45662",
+      "url": "https://github.com/nextai-translator/bob-plugin-openai-translator/releases/download/v5.2.2/openai-translator-5.2.2.bobplugin",
+      "minBobVersion": "1.8.0",
+      "timestamp": 1795273489315
+    },
+    {
       "version": "5.2.1",
       "desc": "修复部分模型把思考过程写进译文或原样返回原文的问题；默认指令按语言自动选择翻译或润色；系统指令留空即使用最新的默认指令",
       "sha256": "ad8f59145ac179b3dd10b27c066589707bb64a431f13bfa277d4c0595e110788",
