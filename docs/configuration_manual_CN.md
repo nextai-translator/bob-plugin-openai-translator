@@ -63,6 +63,8 @@ Gemini 格式的地址填到 `/models` 为止，插件会补上模型和操作�
 - Gemini 格式的中转服务：`https://gateway.example.com/v1beta/models`
 - MiniMax 中国区：`https://api.minimaxi.com/v1/chat/completions`
 - OpenAI 兼容 API：`https://gateway.example.com/v1/responses`
+- OpenLLM（本机 daemon，仅 macOS；API Key 填任意非空内容）：`http://127.0.0.1:8787/v1/chat/completions`
+- OpenLLM（云端，使用 `sk-llm-...` 密钥）：`https://www.openllm.sh/v1/chat/completions`
 - OpenRouter：`https://openrouter.ai/api/v1/chat/completions`
 - Vercel AI Gateway：`https://ai-gateway.vercel.sh/v1/chat/completions`
 
@@ -141,5 +143,6 @@ You are an editor. Polish the $sourceLang text inside the $sourceTag tags, fixin
 - [MiniMax OpenAI-compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)
 - [MiniMax 中国区 OpenAI-compatible API](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)
 - [OpenAI API](https://developers.openai.com/api/docs)
+- [OpenLLM 文档](https://docs.openllm.sh)
 - [OpenRouter Quickstart](https://openrouter.ai/docs/quickstart)
 - [Vercel AI Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions)

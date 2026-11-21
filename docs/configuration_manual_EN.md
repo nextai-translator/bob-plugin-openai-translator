@@ -63,6 +63,8 @@ Common examples:
 - Gemini-format gateway: `https://gateway.example.com/v1beta/models`
 - MiniMax China: `https://api.minimaxi.com/v1/chat/completions`
 - OpenAI-compatible API: `https://gateway.example.com/v1/responses`
+- OpenLLM (local daemon, macOS; any non-empty API key): `http://127.0.0.1:8787/v1/chat/completions`
+- OpenLLM (cloud, `sk-llm-...` key): `https://www.openllm.sh/v1/chat/completions`
 - OpenRouter: `https://openrouter.ai/api/v1/chat/completions`
 - Vercel AI Gateway: `https://ai-gateway.vercel.sh/v1/chat/completions`
 
@@ -141,5 +143,6 @@ Official references:
 - [MiniMax China OpenAI-compatible API](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)
 - [MiniMax OpenAI-compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)
 - [OpenAI API](https://developers.openai.com/api/docs)
+- [OpenLLM docs](https://docs.openllm.sh)
 - [OpenRouter Quickstart](https://openrouter.ai/docs/quickstart)
 - [Vercel AI Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions)
