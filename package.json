@@ -1,6 +1,6 @@
 {
   "name": "bob-plugin-openai-translator",
-  "version": "5.2.1",
+  "version": "5.2.2",
   "private": true,
   "description": "Multi-provider AI translation, polishing, and grammar correction for Bob.",
   "type": "module",

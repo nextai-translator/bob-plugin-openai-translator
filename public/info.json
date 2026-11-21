@@ -131,5 +131,5 @@
     }
   ],
   "summary": "使用 OpenAI、Claude、Gemini、MiniMax 及 OpenAI 兼容 API 进行翻译与文本处理",
-  "version": "5.2.1"
+  "version": "5.2.2"
 }
