@@ -5,6 +5,7 @@ import type { TextTranslateQuery } from '@bob-translate/types';
 import { getServiceAdapter } from '../src/adapter';
 import { parseOptions } from '../src/config';
 import { resolveModelControls } from '../src/utils/model-capabilities';
+import { extractResultText } from '../src/utils/result';
 import { SseStreamHandler } from '../src/utils/sse';
 
 const SAMPLES = 9;
@@ -49,9 +50,10 @@ const streamConfig = {
     typeof data.delta === 'string' ? data.delta : null,
   extractError: () => null,
   isComplete: () => false,
+  displayText: (reply: string) => extractResultText(reply, false, ''),
 };
 const streamEvent =
-  'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"x"}\n\n';
+  'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"<result>x"}\n\n';
 
 const results = {
   capabilityResolution: measure(() => {

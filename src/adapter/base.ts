@@ -11,7 +11,12 @@ import {
   handleGeneralError,
   handleValidateError,
 } from '../utils/error';
-import { createTranslateResult } from '../utils/result';
+import { getSystemPromptTemplate } from '../utils/prompt';
+import {
+  createTranslateResult,
+  extractResultText,
+  RESULT_OPEN,
+} from '../utils/result';
 import { SseStreamHandler } from '../utils/sse';
 
 type StreamCompletionResponse = Pick<
@@ -90,6 +95,7 @@ export abstract class BaseAdapter implements ServiceAdapter {
         extractDelta: (data) => this.extractStreamDelta(data),
         extractError: (data, link) => this.extractStreamError(data, link),
         isComplete: (data) => this.isStreamComplete(data),
+        displayText: (reply) => this.displayText(query, reply, false),
       },
       query,
     );
@@ -239,12 +245,23 @@ export abstract class BaseAdapter implements ServiceAdapter {
     }
   }
 
-  protected completeWithText(query: TextTranslateQuery, text: string): void {
+  protected completeWithText(query: TextTranslateQuery, reply: string): void {
+    const text = this.displayText(query, reply, true);
     if (!text.trim()) {
       this.completeWithError(query, { type: 'api', message: 'API 未返回译文' });
       return;
     }
     query.onCompletion({ result: createTranslateResult(query, text) });
+  }
+
+  private displayText(
+    query: TextTranslateQuery,
+    reply: string,
+    complete: boolean,
+  ): string {
+    return getSystemPromptTemplate(query, this.config).includes(RESULT_OPEN)
+      ? extractResultText(reply, complete, query.text)
+      : reply;
   }
 
   protected completeWithError(query: TextTranslateQuery, error: unknown): void {

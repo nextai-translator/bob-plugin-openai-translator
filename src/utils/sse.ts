@@ -13,6 +13,7 @@ interface SseStreamHandlerConfig {
     troubleshootingLink: string,
   ) => ServiceError | null;
   isComplete: (data: Record<string, unknown>) => boolean;
+  displayText: (reply: string) => string;
   troubleshootingLink: string;
 }
 
@@ -153,8 +154,10 @@ export class SseStreamHandler {
       if (!delta) return;
 
       this.targetText += delta;
+      const text = this.config.displayText(this.targetText);
+      if (!text) return;
       this.query.onStream({
-        result: createTranslateResult(this.query, this.targetText),
+        result: createTranslateResult(this.query, text),
       });
     } catch (error) {
       this.error = this.createProtocolError(

@@ -3,6 +3,7 @@ import type {
   HttpResponse,
   Signal,
   TextTranslateQuery,
+  TextTranslateResult,
   ValidationCompletion,
 } from '@bob-translate/types';
 import { AnthropicAdapter } from '../anthropic';
@@ -43,9 +44,19 @@ const streamCompletionResponse = (
     response: { statusCode, headers: {} },
   }) as unknown as HttpResponse;
 
-const createAdapter = (stream: boolean): OpenAiAdapter =>
+// Transport tests stream untagged text, which the default prompt's result
+// extraction would hold back until completion.
+const UNTAGGED_PROMPT = 'Translate $sourceTag.';
+
+const createAdapter = (
+  stream: boolean,
+  customSystemPrompt = '',
+): OpenAiAdapter =>
   new OpenAiAdapter(
-    createTestConfig({ stream: stream ? 'enable' : 'disable' }),
+    createTestConfig({
+      customSystemPrompt,
+      stream: stream ? 'enable' : 'disable',
+    }),
   );
 
 const createQuery = () => {
@@ -133,7 +144,7 @@ describe('shared transport', () => {
       });
     };
 
-    await createAdapter(true).translate(query, 'key');
+    await createAdapter(true, UNTAGGED_PROMPT).translate(query, 'key');
 
     expect(captured?.cancelSignal).toBe(cancelSignal);
     expect(onStream).toHaveBeenCalledTimes(1);
@@ -148,6 +159,62 @@ describe('shared transport', () => {
     });
   });
 
+  it('streams only the text inside result tags, hiding text before them', async () => {
+    const { onCompletion, onStream, query } = createQuery();
+    const delta = (text: string) =>
+      `event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: text })}\n\n`;
+    streamHandler = (config) => {
+      config.streamHandler?.({
+        text:
+          delta('Note: kept names.\n') +
+          delta('<res') +
+          delta('ult>\n你') +
+          delta('好</re') +
+          delta('sult>') +
+          'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+        rawData: {} as never,
+      });
+      config.handler?.(streamCompletionResponse());
+    };
+
+    await createAdapter(true).translate(query, 'key');
+
+    expect(
+      onStream.mock.calls.map(
+        ([update]) => (update.result as TextTranslateResult).toParagraphs,
+      ),
+    ).toEqual([['你'], ['你好'], ['你好']]);
+    expect(onCompletion.mock.calls[0][0]).toMatchObject({
+      result: { toParagraphs: ['你好'] },
+    });
+  });
+
+  it('shows result tags as text when the custom prompt does not ask for them', async () => {
+    const { onCompletion, query } = createQuery();
+    const reply = 'Keep <result>x</result> here.';
+    requestHandler = async () =>
+      successResponse({
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'output_text', text: reply }],
+          },
+        ],
+      });
+
+    await new OpenAiAdapter(
+      createTestConfig({
+        customSystemPrompt: 'Return the XML for $sourceTag.',
+        stream: 'disable',
+      }),
+    ).translate(query, 'key');
+
+    expect(onCompletion.mock.calls[0][0]).toMatchObject({
+      result: { toParagraphs: [reply] },
+    });
+  });
+
   it('rejects truncated Responses streams without a completed event', async () => {
     const { onCompletion, onStream, query } = createQuery();
     streamHandler = (config) => {
@@ -158,7 +225,7 @@ describe('shared transport', () => {
       config.handler?.(streamCompletionResponse());
     };
 
-    await createAdapter(true).translate(query, 'key');
+    await createAdapter(true, UNTAGGED_PROMPT).translate(query, 'key');
 
     expect(onStream).toHaveBeenCalledTimes(1);
     expect(onCompletion).toHaveBeenCalledTimes(1);
@@ -199,7 +266,7 @@ describe('shared transport', () => {
       config.handler?.(streamCompletionResponse());
     };
 
-    await createAdapter(true).translate(query, 'key');
+    await createAdapter(true, UNTAGGED_PROMPT).translate(query, 'key');
 
     expect(onStream).toHaveBeenCalledTimes(1);
     expect(onCompletion).toHaveBeenCalledTimes(1);
@@ -344,6 +411,7 @@ describe('shared transport', () => {
     const adapter = getServiceAdapter(
       createTestConfig({
         apiUrl: 'https://api.minimaxi.com/v1/chat/completions',
+        customSystemPrompt: UNTAGGED_PROMPT,
         model: 'MiniMax-M3',
       }),
     );
