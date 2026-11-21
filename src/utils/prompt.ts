@@ -22,6 +22,16 @@ export const getSystemPromptTemplate = (
     ? DEFAULT_POLISH_PROMPT
     : DEFAULT_TRANSLATE_PROMPT);
 
+// The target is named by code and by the language's own name, because weaker
+// models given only a code sometimes translate into another language.
+const targetLanguage = (lang: TextTranslateQuery['detectTo']): string => {
+  const entry = langMap.get(lang);
+  if (!entry) return lang;
+  return entry.name === entry.code
+    ? entry.code
+    : `${entry.code} (${entry.name})`;
+};
+
 export const createPrompts = (
   query: TextTranslateQuery,
   config: PluginConfig,
@@ -34,17 +44,24 @@ export const createPrompts = (
     tagName = `__source_text_${suffix}__`;
   }
   const values: Record<string, string> = {
-    sourceLang: langMap.get(query.detectFrom) || query.detectFrom,
+    sourceLang: langMap.get(query.detectFrom)?.code ?? query.detectFrom,
     sourceTag: `<${tagName}>`,
-    targetLang: langMap.get(query.detectTo) || query.detectTo,
+    targetLang: targetLanguage(query.detectTo),
   };
   const systemTemplate = getSystemPromptTemplate(query, config);
+  const source = `<${tagName}>${query.text}</${tagName}>`;
 
   return {
     system: systemTemplate.replace(
       PROMPT_KEYWORD,
       (_, keyword: string) => values[keyword],
     ),
-    user: `<${tagName}>${query.text}</${tagName}>`,
+    // When only the system prompt states the task, weaker models sometimes
+    // translate into another language, answer the source, or return it
+    // untranslated. A custom prompt may set another task, so it gets none.
+    user:
+      !config.customSystemPrompt && systemTemplate === DEFAULT_TRANSLATE_PROMPT
+        ? `${source}\n\nTranslate into ${values.targetLang}.`
+        : source,
   };
 };

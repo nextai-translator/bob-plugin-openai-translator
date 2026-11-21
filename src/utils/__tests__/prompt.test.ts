@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { TextTranslateQuery } from '@bob-translate/types';
 import { parseOptions } from '../../config';
-import { createPrompts } from '../prompt';
+import { createPrompts, DEFAULT_TRANSLATE_PROMPT } from '../prompt';
 
 const query = {
   text: 'Hello',
@@ -24,17 +24,29 @@ describe('prompt construction', () => {
   it('uses the default prompt for the task when none is saved', () => {
     expect(createPrompts(query, config())).toEqual({
       system:
-        'You are a translation engine. Translate the text inside the <__source_text__> tags from en to zh-CN. Preserve meaning, tone, and formatting. Write only the translation, between <result> and </result>.',
-      user: '<__source_text__>Hello</__source_text__>',
+        'You are a translation engine. Translate the text inside the <__source_text__> tags from en to zh-CN (简体中文). Preserve meaning, tone, and formatting. Write only the translation, between <result> and </result>.',
+      user: '<__source_text__>Hello</__source_text__>\n\nTranslate into zh-CN (简体中文).',
     });
 
     const polishQuery = {
       ...query,
       detectTo: 'en',
     } as unknown as TextTranslateQuery;
-    expect(createPrompts(polishQuery, config()).system).toBe(
-      'You are an editor. Polish the en text inside the <__source_text__> tags, fixing grammar, spelling, and awkward wording while preserving meaning, tone, and formatting. Write only the polished text, between <result> and </result>.',
-    );
+    expect(createPrompts(polishQuery, config())).toEqual({
+      system:
+        'You are an editor. Polish the en text inside the <__source_text__> tags, fixing grammar, spelling, and awkward wording while preserving meaning, tone, and formatting. Write only the polished text, between <result> and </result>.',
+      user: '<__source_text__>Hello</__source_text__>',
+    });
+  });
+
+  it('names the target by code and, when it differs, its own name', () => {
+    const targetOf = (detectTo: string) =>
+      createPrompts(
+        { ...query, detectTo } as unknown as TextTranslateQuery,
+        config('$targetLang'),
+      ).system;
+    expect(targetOf('sr-Latn')).toBe('sr (srpski (latinica))');
+    expect(targetOf('yue')).toBe('粤语');
   });
 
   it('uses the current default for a saved default from an earlier release', () => {
@@ -60,15 +72,15 @@ describe('prompt construction', () => {
         { ...query, text } as unknown as TextTranslateQuery,
         config(),
       ).user,
-    ).toBe(`<__source_text__>${text}</__source_text__>`);
+    ).toStartWith(`<__source_text__>${text}</__source_text__>\n\n`);
 
     const named = 'Rename __source_text__ here.';
     const renamed = createPrompts(
       { ...query, text: named } as unknown as TextTranslateQuery,
       config(),
     );
-    expect(renamed.user).toBe(
-      `<__source_text_2__>${named}</__source_text_2__>`,
+    expect(renamed.user).toStartWith(
+      `<__source_text_2__>${named}</__source_text_2__>\n\n`,
     );
     expect(renamed.system).toContain('inside the <__source_text_2__> tags');
 
@@ -82,9 +94,6 @@ describe('prompt construction', () => {
       system: 'Polish it.',
       user: `<__source_text_3__>${closing}</__source_text_3__>`,
     });
-    expect(createPrompts(query, config()).user).toBe(
-      '<__source_text__>Hello</__source_text__>',
-    );
   });
 
   it('replaces every variable in a custom system prompt', () => {
@@ -101,8 +110,11 @@ describe('prompt construction', () => {
       ),
     ).toEqual({
       system:
-        '  ja->zh-CN, ja->zh-CN: <__source_text__><__source_text__> $text  ',
+        '  ja->zh-CN (简体中文), ja->zh-CN (简体中文): <__source_text__><__source_text__> $text  ',
       user: '<__source_text__>Hello</__source_text__>',
     });
+    expect(createPrompts(query, config(DEFAULT_TRANSLATE_PROMPT)).user).toBe(
+      '<__source_text__>Hello</__source_text__>',
+    );
   });
 });

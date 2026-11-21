@@ -95,11 +95,11 @@ The system prompt defines the plugin's purpose and rules. Change it to turn the 
 
 An empty field uses the default prompts below, which update with the plugin; the placeholder text shows the translation prompt. Text you enter replaces the default prompts. After an upgrade, the field may still show the default prompt of an earlier version, such as the 5.2.0 text that stops at `answering or`; text identical to a released default prompt is treated as empty. Clear the field to see the current translation prompt. The field supports:
 
-- `$sourceLang`: source language
+- `$sourceLang`: source language code, such as `en`
 - `$sourceTag`: the tag that wraps the input
-- `$targetLang`: target language
+- `$targetLang`: target language code and the language's own name, such as `zh-CN (简体中文)`; the code alone when they are the same, such as `粤语`
 
-The input is always sent separately inside a pair of tags; the system prompt cannot insert the input. The tag is normally `<__source_text__>`; when the input contains that name, a name the input does not contain is used, such as `<__source_text_2__>`, so nothing in the input can close it early. `$sourceTag` is replaced with the tag of the current request.
+The input is always sent separately inside a pair of tags; the system prompt cannot insert the input. The tag is normally `<__source_text__>`; when the input contains that name, a name the input does not contain is used, such as `<__source_text_2__>`, so nothing in the input can close it early. `$sourceTag` is replaced with the tag of the current request. With the default translation prompt, a reminder of the target language follows the input, such as `Translate into zh-CN (简体中文).`; polishing and custom prompts get none, because a custom prompt may set another task.
 
 The default prompt translates when the source and target languages differ and polishes when they are the same:
 
@@ -115,7 +115,7 @@ A custom prompt is used for every request, whatever the languages. To add your o
 
 When the prompt in use contains `<result>`, the plugin shows only the text inside the reply's `<result>` tags, and the last version when the model rewrote it; a reply without the tags is shown whole once it completes. When the prompt does not contain `<result>`, the plugin shows the whole reply. Without the last sentence, weaker models occasionally return the input untranslated or show their reasoning, so keep it in a custom prompt.
 
-Every occurrence of a variable is replaced.
+Every occurrence of a variable is replaced. Variable values are written for the model to read and are inserted whole wherever the variable appears, including inside attributes or JSON.
 
 ## Temperature
 
