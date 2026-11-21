@@ -64,6 +64,7 @@ Common examples:
 - MiniMax China: `https://api.minimaxi.com/v1/chat/completions`
 - OpenAI-compatible API: `https://gateway.example.com/v1/responses`
 - OpenRouter: `https://openrouter.ai/api/v1/chat/completions`
+- OrcaRouter: `https://api.orcarouter.ai/v1/chat/completions`
 - Vercel AI Gateway: `https://ai-gateway.vercel.sh/v1/chat/completions`
 
 For a URL ending in `/chat/completions` or `/responses`, an Azure host (`*.openai.azure.com`, `*.cognitiveservices.azure.com`, `*.services.ai.azure.com`) or a path containing `/openai/deployments/` uses the `api-key` header instead.

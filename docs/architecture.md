@@ -198,6 +198,7 @@ The option model compiled into Bob 1.22.0 has the same fields as the documented 
 - [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning)
 - [OpenAI Responses migration](https://developers.openai.com/api/docs/guides/migrate-to-responses)
 - [OpenRouter Quickstart](https://openrouter.ai/docs/quickstart)
+- [OrcaRouter](https://www.orcarouter.ai)
 - [Vercel AI Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions)
 
 ## Rejected complexity
