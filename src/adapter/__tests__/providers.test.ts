@@ -13,6 +13,8 @@ const query = {
   detectFrom: 'en',
   detectTo: 'zh-Hans',
 } as unknown as TextTranslateQuery;
+const userMessage =
+  '<__source_text__>Hello</__source_text__>\n\nTranslate into zh-CN (简体中文).';
 
 describe('provider dispatch', () => {
   it('derives the adapter from the model and optional API URL', () => {
@@ -64,7 +66,7 @@ describe('OpenAI protocol codec', () => {
     expect(body.reasoning).toBeUndefined();
     expect(body.temperature).toBeUndefined();
     expect(body.instructions).toContain('<__source_text__> tags');
-    expect(body.input).toBe('<__source_text__>Hello</__source_text__>');
+    expect(body.input).toBe(userMessage);
 
     const disabled = new OpenAiAdapter(
       createTestConfig({ reasoningMode: 'disable' }),
@@ -88,7 +90,7 @@ describe('OpenAI protocol codec', () => {
         role: 'system',
         content: expect.stringContaining('<__source_text__> tags'),
       },
-      { role: 'user', content: '<__source_text__>Hello</__source_text__>' },
+      { role: 'user', content: userMessage },
     ]);
     expect(body.instructions).toBeUndefined();
     expect(body.reasoning_effort).toBeUndefined();
@@ -203,9 +205,7 @@ describe('Anthropic codec', () => {
     });
     expect(body).toMatchObject({
       max_tokens: 32000,
-      messages: [
-        { role: 'user', content: '<__source_text__>Hello</__source_text__>' },
-      ],
+      messages: [{ role: 'user', content: userMessage }],
       model: 'claude-haiku-5-5',
       stream: true,
     });
@@ -283,7 +283,7 @@ describe('Gemini codec', () => {
       contents: [
         {
           role: 'user',
-          parts: [{ text: '<__source_text__>Hello</__source_text__>' }],
+          parts: [{ text: userMessage }],
         },
       ],
     });
