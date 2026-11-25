@@ -64,6 +64,7 @@ Gemini 格式的地址填到 `/models` 为止，插件会补上模型和操作�
 - MiniMax 中国区：`https://api.minimaxi.com/v1/chat/completions`
 - OpenAI 兼容 API：`https://gateway.example.com/v1/responses`
 - OpenRouter：`https://openrouter.ai/api/v1/chat/completions`
+- OrcaRouter：`https://api.orcarouter.ai/v1/chat/completions`
 - Vercel AI Gateway：`https://ai-gateway.vercel.sh/v1/chat/completions`
 
 地址以 `/chat/completions` 或 `/responses` 结尾时，Azure 主机（`*.openai.azure.com`、`*.cognitiveservices.azure.com`、`*.services.ai.azure.com`）以及包含 `/openai/deployments/` 的路径会改用 `api-key` 请求头。
